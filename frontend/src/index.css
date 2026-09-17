@@ -3106,6 +3106,132 @@ button { cursor: pointer; }
   to { opacity: 1; transform: scale(1); }
 }
 
+/* ==========================================================================
+   AI Assistant Weather & Vehicle Recommendation Cards
+   ========================================================================== */
+.chat-weather-card {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(16, 185, 129, 0.08));
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+
+.chat-weather-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.chat-weather-dest {
+  font-size: 0.92rem;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-weather-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.badge-rain {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+.badge-clear {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.chat-weather-body {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.chat-weather-temp {
+  font-size: 1.8rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text);
+}
+
+.chat-weather-temp span {
+  font-size: 1rem;
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+.chat-weather-desc {
+  font-size: 0.78rem;
+}
+
+.chat-weather-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.chat-weather-notice {
+  font-size: 0.78rem;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.chat-rec-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.chat-rec-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.chat-rec-card:hover {
+  border-color: var(--accent);
+}
+
+.chat-rec-pill {
+  font-size: 0.68rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+
+.chat-rec-reason {
+  font-size: 0.75rem;
+  line-height: 1.35;
+  color: var(--text);
+  background: var(--bg-inset);
+  padding: 6px 8px;
+  border-radius: 6px;
+  margin-top: 8px;
+  border-left: 3px solid var(--accent);
+}
+
 
 
 

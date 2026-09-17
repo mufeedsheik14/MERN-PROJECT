@@ -22,6 +22,7 @@ const errorHandler = require('./middleware/errorHandler');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const vehicleRoutes = require('./routes/vehicleRoutes');
+const weatherRoutes = require('./routes/weatherRoutes');
 
 // ── Connect to MongoDB ────────────────────────────────────────
 connectDB();
@@ -65,6 +66,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/vehicles', vehicleRoutes);
+app.use('/api/weather', weatherRoutes);
 
 // ── 404 handler (must come after all routes) ──────────────────
 app.use((req, res) => {

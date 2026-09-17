@@ -305,10 +305,15 @@ function generateLocalContextReply({
     return `ℹ️ **Cancellation & Status Policy**:\n• You can cancel any **Pending** or **Confirmed** reservation at zero cancellation fee from the **My Bookings** page.\n• Status Meanings:\n  - **Pending**: Reservation submitted, awaiting branch review.\n  - **Confirmed**: Vehicle reserved and prepared at branch.\n  - **Ongoing**: Vehicle picked up; trip in progress.\n  - **Completed**: Returned and security deposit processed.`;
   }
 
+  // Weather-based recommendation guidance
+  if (q.includes("suggest") || q.includes("recommend")) {
+    return `🌟 To get vehicle recommendations tailored to your destination's real-time weather, click **[Suggest]** above or tell me your passenger count and destination (e.g. *"4 passengers to Ooty"*).`;
+  }
+
   // Default polite, context-aware reply with suggestions
   if (role === "admin" || role === "staff") {
     return `👋 Hello ${user?.name || "Team"}! As your **${role === "admin" ? "Fleet Intelligence" : "Branch Operations"} Assistant**, I can:\n• Summarize active bookings and revenue\n• List vehicles currently in maintenance\n• Provide quick dashboard navigation help\n\nWhat would you like to review?`;
   }
 
-  return `👋 Welcome to RoadReady! I'm your AI Trip Advisor. I can help you with:\n• **Fleet search**: "Cheapest car in Madurai" or "Show electric bikes"\n• **Coupons**: "What discounts are available?"\n• **Your Bookings**: "What is my booking status?"\n• **Trip advice**: Find vehicles by seats, budget, or fuel type.\n\nHow can I help you today?`;
+  return `👋 Welcome to RoadReady! I'm your AI Trip Advisor. I can help you with:\n• **Weather Recommendations**: Click "Suggest" or ask for trip advice\n• **Fleet search**: "Cheapest car in Madurai" or "Show electric bikes"\n• **Coupons**: "What discounts are available?"\n• **Your Bookings**: "What is my booking status?"\n\nHow can I help you today?`;
 }

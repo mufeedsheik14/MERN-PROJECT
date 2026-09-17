@@ -64,7 +64,7 @@ export default function Login() {
     if (user) {
       const returnPath = location.state?.from?.pathname || location.state?.from;
       if (returnPath) {
-        navigate(returnPath, { replace: true });
+        navigate(returnPath, { replace: true, state: location.state });
       } else if (user.role === "admin" || user.role === "staff") {
         navigate("/dashboard", { replace: true });
       } else {
