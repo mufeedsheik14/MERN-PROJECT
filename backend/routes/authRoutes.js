@@ -7,10 +7,8 @@ const {
   getMe,
   updateMe, updateProfileRules,
 } = require('../controllers/authController');
-
 const { protect } = require('../middleware/auth');
 const validate = require('../middleware/validate');
-
 // POST /api/auth/register  — Customer self-registration
 router.post('/register', registerRules, validate, register);
 

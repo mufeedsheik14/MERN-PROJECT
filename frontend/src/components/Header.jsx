@@ -137,6 +137,16 @@ export default function Header() {
                   {getRoleBadge()}
                   <span style={{ fontWeight: 600 }}>{user.name}</span>
                 </NavLink>
+              ) : isStaff ? (
+                <NavLink
+                  to="/dashboard?tab=profile"
+                  className="btn-user"
+                  title="My Staff Profile"
+                  style={{ display: "flex", alignItems: "center", gap: "6px" }}
+                >
+                  {getRoleBadge()}
+                  <span style={{ fontWeight: 600 }}>{user.name}</span>
+                </NavLink>
               ) : (
                 <div
                   className="btn-user"

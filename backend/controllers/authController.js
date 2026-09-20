@@ -51,6 +51,10 @@ const updateProfileRules = [
   body('email').optional().trim().isEmail().withMessage('Invalid email address'),
   body('phone').optional().trim()
     .matches(/^(\d{10})?$/).withMessage('Phone must be 10 digits or empty'),
+  body('emergencyContactPhone').optional().trim()
+    .matches(/^(\d{10})?$/).withMessage('Emergency contact phone must be 10 digits or empty'),
+  body('dateOfBirth').optional().trim(),
+  body('emergencyContactName').optional().trim(),
   body('pincode').optional().trim()
     .matches(/^(\d{6})?$/).withMessage('Pincode must be 6 digits or empty'),
 ];
@@ -189,12 +193,16 @@ const getMe = async (req, res, next) => {
  */
 const updateMe = async (req, res, next) => {
   try {
-    // Fields a user is allowed to update on their own profile
+    // Fields a user is allowed to update on their own profile.
+    // System fields (role, branch, employeeId, accountStatus, active) are strictly Admin-only.
     const allowedFields = [
       'name', 'email', 'phone',
       'address', 'addressLine2',
       'city', 'state', 'pincode', 'country',
       'avatar',
+      'dateOfBirth',
+      'emergencyContactName',
+      'emergencyContactPhone',
     ];
 
     const updates = {};

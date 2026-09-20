@@ -18,7 +18,14 @@ import {
 
 export default function AdminDashboard() {
   const { t } = useLanguage();
-  const { user, users, createStaff, toggleStaffStatus } = useAuth();
+  const {
+    user,
+    users,
+    createStaff,
+    updateStaff,
+    toggleStaffStatus,
+    setStaffAccountStatus,
+  } = useAuth();
   const { bookings, updateBookingStatus, cancelBooking } = useBookings();
   const {
     vehicles,
@@ -51,10 +58,37 @@ export default function AdminDashboard() {
     username: "",
     password: "",
     int_Branch_Id: 1,
+    employeeId: "",
     email: "",
     phone: "",
+    address: "",
+    dateOfBirth: "",
+    emergencyContactName: "",
+    emergencyContactPhone: "",
+    accountStatus: "Active",
   });
   const [staffError, setStaffError] = useState("");
+
+  // Edit Staff modal state
+  const [showEditStaffModal, setShowEditStaffModal] = useState(false);
+  const [editStaffTarget, setEditStaffTarget] = useState(null);
+  const [editStaffForm, setEditStaffForm] = useState({
+    name: "",
+    employeeId: "",
+    int_Branch_Id: 1,
+    email: "",
+    phone: "",
+    address: "",
+    dateOfBirth: "",
+    emergencyContactName: "",
+    emergencyContactPhone: "",
+    accountStatus: "Active",
+  });
+  const [editStaffError, setEditStaffError] = useState("");
+
+  // Staff search and branch filters
+  const [staffSearch, setStaffSearch] = useState("");
+  const [staffBranchFilter, setStaffBranchFilter] = useState("");
 
   // Add Coupon form state
   const [showAddCouponModal, setShowAddCouponModal] = useState(false);
@@ -142,10 +176,23 @@ export default function AdminDashboard() {
     });
   }, [vehicles, fleetBranchFilter]);
 
-  // Staff members list
+  // Staff members list with search and branch filter
   const staffList = useMemo(() => {
-    return users.filter((u) => u.role === "staff");
-  }, [users]);
+    return users.filter((u) => {
+      if (u.role !== "staff") return false;
+      if (staffBranchFilter && String(u.int_Branch_Id) !== staffBranchFilter) return false;
+      if (!staffSearch.trim()) return true;
+      const q = staffSearch.toLowerCase();
+      return (
+        u.name?.toLowerCase().includes(q) ||
+        u.username?.toLowerCase().includes(q) ||
+        u.employeeId?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q) ||
+        u.phone?.includes(q) ||
+        u.emergencyContactName?.toLowerCase().includes(q)
+      );
+    });
+  }, [users, staffBranchFilter, staffSearch]);
 
   // KYC pending count for admin badge
   const { getAllCustomerDocs } = useCustomerDocuments();
@@ -160,16 +207,16 @@ export default function AdminDashboard() {
   }, [bookings]);
 
   // Handle Add Staff
-  const handleSaveStaff = (e) => {
+  const handleSaveStaff = async (e) => {
     e.preventDefault();
     setStaffError("");
     if (!staffForm.username.trim() || !staffForm.password || !staffForm.name.trim()) {
       setStaffError(t("field_required"));
       return;
     }
-    const result = createStaff(staffForm);
+    const result = await createStaff(staffForm);
     if (!result.success) {
-      setStaffError(t(result.errorKey || "username_taken"));
+      setStaffError(result.message || t(result.errorKey || "username_taken"));
       return;
     }
     setStaffForm({
@@ -177,10 +224,52 @@ export default function AdminDashboard() {
       username: "",
       password: "",
       int_Branch_Id: 1,
+      employeeId: "",
       email: "",
       phone: "",
+      address: "",
+      dateOfBirth: "",
+      emergencyContactName: "",
+      emergencyContactPhone: "",
+      accountStatus: "Active",
     });
     setShowAddStaffModal(false);
+  };
+
+  // Open Edit Staff Modal
+  const handleOpenEditStaff = (staff) => {
+    setEditStaffTarget(staff);
+    setEditStaffForm({
+      name: staff.name || "",
+      employeeId: staff.employeeId || "",
+      int_Branch_Id: staff.int_Branch_Id || 1,
+      email: staff.email || "",
+      phone: staff.phone || "",
+      address: staff.address || "",
+      dateOfBirth: staff.dateOfBirth || "",
+      emergencyContactName: staff.emergencyContactName || "",
+      emergencyContactPhone: staff.emergencyContactPhone || "",
+      accountStatus: staff.accountStatus || (staff.active !== false ? "Active" : "Deactivated"),
+    });
+    setEditStaffError("");
+    setShowEditStaffModal(true);
+  };
+
+  // Save Edit Staff
+  const handleSaveEditStaff = async (e) => {
+    e.preventDefault();
+    setEditStaffError("");
+    if (!editStaffForm.name.trim()) {
+      setEditStaffError("Full Name is required.");
+      return;
+    }
+    const result = await updateStaff(editStaffTarget.username, editStaffForm);
+    if (!result.success) {
+      setEditStaffError(result.message || "Failed to update staff member.");
+      return;
+    }
+    setShowEditStaffModal(false);
+    setEditStaffTarget(null);
   };
 
   // Handle Add Coupon
@@ -508,77 +597,219 @@ export default function AdminDashboard() {
       {/* TAB 3: STAFF MANAGEMENT */}
       {activeTab === "staff" && (
         <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px" }}>
-            <h3>Branch Staff Accounts ({staffList.length})</h3>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => setShowAddStaffModal(true)}
-              style={{ fontSize: "0.85rem", padding: "8px 16px" }}
-            >
-              + {t("add_staff")}
-            </button>
-          </div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "18px",
+              flexWrap: "wrap",
+              gap: "12px",
+            }}
+          >
+            <div>
+              <h3 style={{ margin: 0, fontSize: "1.3rem" }}>
+                Enterprise Staff Accounts ({staffList.length})
+              </h3>
+              <p style={{ margin: "4px 0 0 0", color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                Admin oversight: View and manage staff personal information, employee IDs, emergency contacts, and approval status.
+              </p>
+            </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "16px" }}>
-            {staffList.map((s) => (
-              <div
-                key={s.username}
+            <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
+              <input
+                type="text"
+                placeholder="Search staff by name, ID, phone..."
+                value={staffSearch}
+                onChange={(e) => setStaffSearch(e.target.value)}
                 style={{
-                  background: "var(--bg-elevated)",
+                  padding: "8px 14px",
+                  borderRadius: "999px",
                   border: "1px solid var(--border)",
-                  borderRadius: "var(--radius)",
-                  padding: "18px",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
+                  background: "var(--bg-inset)",
+                  fontSize: "0.85rem",
+                  minWidth: "240px",
+                }}
+              />
+              <select
+                value={staffBranchFilter}
+                onChange={(e) => setStaffBranchFilter(e.target.value)}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: "999px",
+                  border: "1px solid var(--border)",
+                  background: "var(--bg-inset)",
+                  fontSize: "0.85rem",
                 }}
               >
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                    <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>{s.name}</div>
-                    <span
-                      className="badge"
+                <option value="">All Branches</option>
+                {branches.map((b) => (
+                  <option key={b.int_Branch_Id} value={String(b.int_Branch_Id)}>
+                    {b.txt_Branch_Name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setShowAddStaffModal(true)}
+                style={{ fontSize: "0.85rem", padding: "8px 16px" }}
+              >
+                + {t("add_staff")}
+              </button>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: "18px" }}>
+            {staffList.map((s) => {
+              const status = s.accountStatus || (s.active !== false ? "Active" : "Deactivated");
+              const isPending = status === "Pending Approval";
+              const isActive = status === "Active";
+
+              const badgeColor = isActive
+                ? { bg: "rgba(46,125,79,0.16)", text: "var(--signal-green)", border: "1px solid rgba(46,125,79,0.3)" }
+                : isPending
+                ? { bg: "rgba(217,119,6,0.16)", text: "var(--signal-amber)", border: "1px solid rgba(217,119,6,0.3)" }
+                : { bg: "rgba(181,67,45,0.14)", text: "var(--signal-red)", border: "1px solid rgba(181,67,45,0.3)" };
+
+              return (
+                <div
+                  key={s.username}
+                  style={{
+                    background: "var(--bg-elevated)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius)",
+                    padding: "20px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    gap: "14px",
+                  }}
+                >
+                  <div>
+                    {/* Header line: Name & Status */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: "1.1rem" }}>{s.name}</div>
+                        <div style={{ color: "var(--text-muted)", fontSize: "0.82rem" }}>
+                          @{s.username} · <span style={{ color: "var(--accent)", fontWeight: 600 }}>{s.employeeId || `RR-STF-${s.int_Branch_Id}`}</span>
+                        </div>
+                      </div>
+                      <span
+                        style={{
+                          background: badgeColor.bg,
+                          color: badgeColor.text,
+                          border: badgeColor.border,
+                          fontSize: "0.78rem",
+                          fontWeight: 700,
+                          padding: "3px 10px",
+                          borderRadius: "999px",
+                        }}
+                      >
+                        ● {status}
+                      </span>
+                    </div>
+
+                    {/* Staff Personal Info Details Grid */}
+                    <div
                       style={{
-                        background: s.active !== false ? "rgba(46,125,79,0.16)" : "rgba(181,67,45,0.14)",
-                        color: s.active !== false ? "var(--signal-green)" : "var(--signal-red)",
+                        background: "var(--bg-inset)",
+                        borderRadius: "8px",
+                        padding: "12px",
+                        fontSize: "0.83rem",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                        marginTop: "8px",
                       }}
                     >
-                      {s.active !== false ? t("status_active") : t("status_deactivated")}
-                    </span>
+                      <div>
+                        <span style={{ color: "var(--text-muted)" }}>🏢 Branch: </span>
+                        <strong>{getBranchName(s.int_Branch_Id)}</strong> (#{s.int_Branch_Id})
+                      </div>
+                      <div>
+                        <span style={{ color: "var(--text-muted)" }}>📧 Email: </span>
+                        <strong>{s.email || "Not provided"}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: "var(--text-muted)" }}>📱 Phone: </span>
+                        <strong>{s.phone || "Not provided"}</strong>
+                      </div>
+                      <div>
+                        <span style={{ color: "var(--text-muted)" }}>🏠 Address: </span>
+                        <span>{s.address || "Not provided"}</span>
+                      </div>
+                      <div>
+                        <span style={{ color: "var(--text-muted)" }}>🎂 Date of Birth: </span>
+                        <span>{s.dateOfBirth || "Not provided"}</span>
+                      </div>
+                      <div style={{ borderTop: "1px dashed var(--border)", paddingTop: "6px", marginTop: "2px" }}>
+                        <span style={{ color: "var(--text-muted)" }}>🚨 Emergency Contact: </span>
+                        <strong>{s.emergencyContactName || "None"}</strong>
+                        {s.emergencyContactPhone && (
+                          <span style={{ marginLeft: "4px", color: "var(--accent)" }}>
+                            ({s.emergencyContactPhone})
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "4px" }}>
-                    Username: <strong>@{s.username}</strong>
-                  </div>
-                  <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginBottom: "4px" }}>
-                    Branch: <strong>{getBranchName(s.int_Branch_Id)}</strong>
-                  </div>
-                  {s.email && (
-                    <div style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>Email: {s.email}</div>
-                  )}
-                </div>
-
-                <div style={{ marginTop: "16px", paddingTop: "12px", borderTop: "1px solid var(--border)" }}>
-                  <button
-                    type="button"
-                    className={s.active !== false ? "btn-danger" : "btn btn-ghost"}
-                    style={{ width: "100%", fontSize: "0.82rem", padding: "8px" }}
-                    onClick={() => {
-                      setModalConfig({
-                        isOpen: true,
-                        title: s.active !== false ? t("deactivate") : t("activate"),
-                        message: `${t("confirm_deactivate_staff")} (@${s.username})`,
-                        isDanger: s.active !== false,
-                        onConfirm: () => toggleStaffStatus(s.username),
-                      });
+                  {/* Actions Bar */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "8px",
+                      paddingTop: "12px",
+                      borderTop: "1px solid var(--border)",
+                      flexWrap: "wrap",
                     }}
                   >
-                    {s.active !== false ? `🚫 ${t("deactivate")}` : `✅ ${t("activate")}`}
-                  </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      style={{ flex: 1, fontSize: "0.82rem", padding: "6px 10px" }}
+                      onClick={() => handleOpenEditStaff(s)}
+                    >
+                      ✏️ Edit Profile
+                    </button>
+
+                    {isPending && (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        style={{
+                          background: "var(--signal-green)",
+                          borderColor: "var(--signal-green)",
+                          fontSize: "0.82rem",
+                          padding: "6px 12px",
+                        }}
+                        onClick={() => setStaffAccountStatus(s.username, "Active")}
+                      >
+                        ✅ Approve
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      className={s.active !== false ? "btn-danger" : "btn btn-ghost"}
+                      style={{ fontSize: "0.82rem", padding: "6px 12px" }}
+                      onClick={() => {
+                        setModalConfig({
+                          isOpen: true,
+                          title: s.active !== false ? t("deactivate") : t("activate"),
+                          message: `${t("confirm_deactivate_staff")} (@${s.username})`,
+                          isDanger: s.active !== false,
+                          onConfirm: () => toggleStaffStatus(s.username),
+                        });
+                      }}
+                    >
+                      {s.active !== false ? `🚫 ${t("deactivate")}` : `✅ ${t("activate")}`}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -809,66 +1040,321 @@ export default function AdminDashboard() {
               border: "1px solid var(--border)",
               borderRadius: "var(--radius)",
               padding: "28px",
-              maxWidth: "460px",
+              maxWidth: "560px",
               width: "100%",
+              maxHeight: "90vh",
+              overflowY: "auto",
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ marginTop: 0 }}>{t("add_staff")}</h3>
+            <h3 style={{ marginTop: 0 }}>Add New Staff Member</h3>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "-6px", marginBottom: "18px" }}>
+              Create an enterprise staff profile with personal information and branch assignment.
+            </p>
             {staffError && <div className="alert alert-error">{staffError}</div>}
 
             <form onSubmit={handleSaveStaff}>
-              <div className="form-row">
-                <label>{t("staff_name")}</label>
-                <input
-                  required
-                  value={staffForm.name}
-                  onChange={(e) => setStaffForm({ ...staffForm, name: e.target.value })}
-                  placeholder="e.g. Ramesh Kumar"
-                />
+              <div className="form-row two">
+                <div>
+                  <label>Full Name *</label>
+                  <input
+                    required
+                    value={staffForm.name}
+                    onChange={(e) => setStaffForm({ ...staffForm, name: e.target.value })}
+                    placeholder="e.g. Ramesh Kumar"
+                  />
+                </div>
+                <div>
+                  <label>Employee ID</label>
+                  <input
+                    value={staffForm.employeeId}
+                    onChange={(e) => setStaffForm({ ...staffForm, employeeId: e.target.value })}
+                    placeholder="Auto-generated if empty"
+                  />
+                </div>
               </div>
 
-              <div className="form-row">
-                <label>{t("username")}</label>
-                <input
-                  required
-                  value={staffForm.username}
-                  onChange={(e) => setStaffForm({ ...staffForm, username: e.target.value })}
-                  placeholder="e.g. staff_coimbatore"
-                />
+              <div className="form-row two">
+                <div>
+                  <label>{t("username")} *</label>
+                  <input
+                    required
+                    value={staffForm.username}
+                    onChange={(e) => setStaffForm({ ...staffForm, username: e.target.value })}
+                    placeholder="e.g. staff_coimbatore"
+                  />
+                </div>
+                <div>
+                  <label>{t("password")} *</label>
+                  <input
+                    type="password"
+                    required
+                    value={staffForm.password}
+                    onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })}
+                    placeholder="••••••••"
+                  />
+                </div>
               </div>
 
-              <div className="form-row">
-                <label>{t("password")}</label>
-                <input
-                  type="password"
-                  required
-                  value={staffForm.password}
-                  onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })}
-                  placeholder="••••••••"
-                />
+              <div className="form-row two">
+                <div>
+                  <label>{t("assign_branch")} *</label>
+                  <select
+                    value={staffForm.int_Branch_Id}
+                    onChange={(e) => setStaffForm({ ...staffForm, int_Branch_Id: Number(e.target.value) })}
+                  >
+                    {branches.map((b) => (
+                      <option key={b.int_Branch_Id} value={b.int_Branch_Id}>
+                        {b.txt_Branch_Name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label>Account Status / Approval</label>
+                  <select
+                    value={staffForm.accountStatus}
+                    onChange={(e) => setStaffForm({ ...staffForm, accountStatus: e.target.value })}
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Pending Approval">Pending Approval</option>
+                    <option value="Deactivated">Deactivated</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="form-row">
-                <label>{t("assign_branch")}</label>
-                <select
-                  value={staffForm.int_Branch_Id}
-                  onChange={(e) => setStaffForm({ ...staffForm, int_Branch_Id: Number(e.target.value) })}
-                >
-                  {branches.map((b) => (
-                    <option key={b.int_Branch_Id} value={b.int_Branch_Id}>
-                      {b.txt_Branch_Name}
-                    </option>
-                  ))}
-                </select>
+              <div className="form-row two">
+                <div>
+                  <label>Email Address</label>
+                  <input
+                    type="email"
+                    value={staffForm.email}
+                    onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })}
+                    placeholder="ramesh@roadready.com"
+                  />
+                </div>
+                <div>
+                  <label>Phone Number (10 Digits)</label>
+                  <input
+                    value={staffForm.phone}
+                    maxLength={10}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                      setStaffForm({ ...staffForm, phone: val });
+                    }}
+                    placeholder="9840112233"
+                  />
+                </div>
               </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "20px" }}>
+              <div className="form-row two">
+                <div>
+                  <label>Date of Birth</label>
+                  <input
+                    type="date"
+                    value={staffForm.dateOfBirth}
+                    onChange={(e) => setStaffForm({ ...staffForm, dateOfBirth: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label>Address</label>
+                  <input
+                    value={staffForm.address}
+                    onChange={(e) => setStaffForm({ ...staffForm, address: e.target.value })}
+                    placeholder="Street, City, PIN"
+                  />
+                </div>
+              </div>
+
+              <div className="form-row two">
+                <div>
+                  <label>Emergency Contact Name</label>
+                  <input
+                    value={staffForm.emergencyContactName}
+                    onChange={(e) => setStaffForm({ ...staffForm, emergencyContactName: e.target.value })}
+                    placeholder="Contact Name"
+                  />
+                </div>
+                <div>
+                  <label>Emergency Contact Phone</label>
+                  <input
+                    value={staffForm.emergencyContactPhone}
+                    maxLength={10}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                      setStaffForm({ ...staffForm, emergencyContactPhone: val });
+                    }}
+                    placeholder="10-digit number"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "24px" }}>
                 <button type="button" className="btn btn-ghost" onClick={() => setShowAddStaffModal(false)}>
                   {t("cancel")}
                 </button>
                 <button type="submit" className="btn btn-primary">
                   {t("add_staff")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL: Edit Staff Member --- */}
+      {showEditStaffModal && editStaffTarget && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.65)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 9999,
+            padding: "20px",
+          }}
+          onClick={() => setShowEditStaffModal(false)}
+        >
+          <div
+            style={{
+              background: "var(--bg-elevated)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius)",
+              padding: "28px",
+              maxWidth: "560px",
+              width: "100%",
+              maxHeight: "90vh",
+              overflowY: "auto",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ marginTop: 0 }}>
+              Edit Staff Profile: @{editStaffTarget.username}
+            </h3>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "-6px", marginBottom: "18px" }}>
+              Update staff personal information, employee ID, branch, or account approval status.
+            </p>
+            {editStaffError && <div className="alert alert-error">{editStaffError}</div>}
+
+            <form onSubmit={handleSaveEditStaff}>
+              <div className="form-row two">
+                <div>
+                  <label>Full Name *</label>
+                  <input
+                    required
+                    value={editStaffForm.name}
+                    onChange={(e) => setEditStaffForm({ ...editStaffForm, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label>Employee ID</label>
+                  <input
+                    value={editStaffForm.employeeId}
+                    onChange={(e) => setEditStaffForm({ ...editStaffForm, employeeId: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row two">
+                <div>
+                  <label>Branch Assignment</label>
+                  <select
+                    value={editStaffForm.int_Branch_Id}
+                    onChange={(e) => setEditStaffForm({ ...editStaffForm, int_Branch_Id: Number(e.target.value) })}
+                  >
+                    {branches.map((b) => (
+                      <option key={b.int_Branch_Id} value={b.int_Branch_Id}>
+                        {b.txt_Branch_Name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label>Account Status / Approval</label>
+                  <select
+                    value={editStaffForm.accountStatus}
+                    onChange={(e) => setEditStaffForm({ ...editStaffForm, accountStatus: e.target.value })}
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Pending Approval">Pending Approval</option>
+                    <option value="Deactivated">Deactivated</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-row two">
+                <div>
+                  <label>Email Address</label>
+                  <input
+                    type="email"
+                    value={editStaffForm.email}
+                    onChange={(e) => setEditStaffForm({ ...editStaffForm, email: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label>Phone Number (10 Digits)</label>
+                  <input
+                    value={editStaffForm.phone}
+                    maxLength={10}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                      setEditStaffForm({ ...editStaffForm, phone: val });
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row two">
+                <div>
+                  <label>Date of Birth</label>
+                  <input
+                    type="date"
+                    value={editStaffForm.dateOfBirth}
+                    onChange={(e) => setEditStaffForm({ ...editStaffForm, dateOfBirth: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label>Address</label>
+                  <input
+                    value={editStaffForm.address}
+                    onChange={(e) => setEditStaffForm({ ...editStaffForm, address: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row two">
+                <div>
+                  <label>Emergency Contact Name</label>
+                  <input
+                    value={editStaffForm.emergencyContactName}
+                    onChange={(e) => setEditStaffForm({ ...editStaffForm, emergencyContactName: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label>Emergency Contact Phone</label>
+                  <input
+                    value={editStaffForm.emergencyContactPhone}
+                    maxLength={10}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                      setEditStaffForm({ ...editStaffForm, emergencyContactPhone: val });
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "24px" }}>
+                <button type="button" className="btn btn-ghost" onClick={() => setShowEditStaffModal(false)}>
+                  {t("cancel")}
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save Staff Details
                 </button>
               </div>
             </form>

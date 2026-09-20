@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import { useBookings } from "../context/BookingContext";
 import CustomerDocumentsCard from "../components/documents/CustomerDocumentsCard";
+import StaffProfileCard from "../components/dashboard/StaffProfileCard";
 
 export default function Profile() {
   const { user, updateProfile } = useAuth();
@@ -44,6 +45,15 @@ export default function Profile() {
   }, [user]);
 
   if (!user) return null;
+
+  // Staff members view and manage their own Staff Profile (no Customer KYC required)
+  if (user.role === "staff") {
+    return (
+      <div className="container" style={{ padding: "40px 16px" }}>
+        <StaffProfileCard />
+      </div>
+    );
+  }
 
   // Filter bookings for this customer
   const myBookings = bookings.filter(

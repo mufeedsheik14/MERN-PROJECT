@@ -157,3 +157,127 @@ export async function updateProfileApi(updates, token) {
 
   return data; // { success: true, user, message }
 }
+
+/**
+ * Get all staff members (Admin only).
+ * GET http://localhost:5000/api/users?role=staff
+ */
+export async function getAllStaffApi(token) {
+  const authToken = token || getStoredToken();
+  if (!authToken) throw new Error("No authorization token found");
+
+  const response = await fetch(`${API_BASE_URL}/users?role=staff`, {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || "Failed to fetch staff members");
+  }
+  return data.users;
+}
+
+/**
+ * Create a new staff account with personal info (Admin only).
+ * POST http://localhost:5000/api/users/staff
+ */
+export async function createStaffApi(staffData, token) {
+  const authToken = token || getStoredToken();
+  if (!authToken) throw new Error("No authorization token found");
+
+  const response = await fetch(`${API_BASE_URL}/users/staff`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: JSON.stringify(staffData),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || "Failed to create staff account");
+  }
+  return data;
+}
+
+/**
+ * Update a staff member's personal information (Admin only).
+ * PUT http://localhost:5000/api/users/staff/:username
+ */
+export async function updateStaffApi(username, updates, token) {
+  const authToken = token || getStoredToken();
+  if (!authToken) throw new Error("No authorization token found");
+
+  const response = await fetch(`${API_BASE_URL}/users/staff/${encodeURIComponent(username)}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: JSON.stringify(updates),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || "Failed to update staff member");
+  }
+  return data;
+}
+
+/**
+ * Update staff account status / approval (Admin only).
+ * PATCH http://localhost:5000/api/users/staff/:username/status
+ */
+export async function updateStaffStatusApi(username, status, token) {
+  const authToken = token || getStoredToken();
+  if (!authToken) throw new Error("No authorization token found");
+
+  const response = await fetch(`${API_BASE_URL}/users/staff/${encodeURIComponent(username)}/status`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
+    },
+    body: JSON.stringify({ status }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || "Failed to update staff status");
+  }
+  return data;
+}
+
+/**
+ * Toggle user/staff active status (Admin only).
+ * PATCH http://localhost:5000/api/users/:username/toggle
+ */
+export async function toggleStaffStatusApi(username, token) {
+  const authToken = token || getStoredToken();
+  if (!authToken) throw new Error("No authorization token found");
+
+  const response = await fetch(`${API_BASE_URL}/users/${encodeURIComponent(username)}/toggle`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || "Failed to toggle staff status");
+  }
+  return data;
+}
+
+/**
+ * Get staff profile by username (Admin or Self only).
+ * GET http://localhost:5000/api/users/:username
+ */
+export async function getStaffByUsernameApi(username, token) {
+  const authToken = token || getStoredToken();
+  if (!authToken) throw new Error("No authorization token found");
+
+  const response = await fetch(`${API_BASE_URL}/users/${encodeURIComponent(username)}`, {
+    headers: { Authorization: `Bearer ${authToken}` },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.success) {
+    throw new Error(data.message || "Failed to fetch user");
+  }
+  return data;
+}

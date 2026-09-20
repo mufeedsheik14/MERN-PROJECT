@@ -21,6 +21,20 @@ const createStaffRules = [
   body('email').optional().trim().isEmail().withMessage('Invalid email address'),
   body('phone').optional().trim()
     .matches(/^(\d{10})?$/).withMessage('Phone must be 10 digits or empty'),
+  body('emergencyContactPhone').optional().trim()
+    .matches(/^(\d{10})?$/).withMessage('Emergency contact phone must be 10 digits or empty'),
+  body('accountStatus').optional().isIn(['Active', 'Pending Approval', 'Deactivated']).withMessage('Invalid account status'),
+];
+
+const updateStaffRules = [
+  body('name').optional().trim().notEmpty().withMessage('Name cannot be blank'),
+  body('email').optional().trim().isEmail().withMessage('Invalid email address'),
+  body('phone').optional().trim()
+    .matches(/^(\d{10})?$/).withMessage('Phone must be 10 digits or empty'),
+  body('emergencyContactPhone').optional().trim()
+    .matches(/^(\d{10})?$/).withMessage('Emergency contact phone must be 10 digits or empty'),
+  body('int_Branch_Id').optional().isInt({ min: 1 }).withMessage('Branch must be a positive integer'),
+  body('accountStatus').optional().isIn(['Active', 'Pending Approval', 'Deactivated']).withMessage('Invalid account status'),
 ];
 
 // ── Controller functions ──────────────────────────────────────────────────────
@@ -48,6 +62,7 @@ const getAllUsers = async (req, res, next) => {
         { username: regex },
         { name: regex },
         { email: regex },
+        { employeeId: regex },
       ];
     }
 
@@ -67,12 +82,24 @@ const getAllUsers = async (req, res, next) => {
 
 /**
  * GET /api/users/:username
- * Admin/Staff — get a single user by username.
+ * Admin: get any user by username
+ * Staff: get ONLY own user document (strictly blocked from viewing other staff or admin)
+ * Customer: blocked by route middleware
  */
 const getUserByUsername = async (req, res, next) => {
   try {
+    const requestedUsername = req.params.username.toLowerCase();
+
+    // Customers must never access staff personal information
+    if (req.user.role === 'customer') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied — customer cannot access user profile information',
+      });
+    }
+
     const user = await User.findOne({
-      username: req.params.username.toLowerCase(),
+      username: requestedUsername,
     }).select('-password');
 
     if (!user) {
@@ -80,6 +107,16 @@ const getUserByUsername = async (req, res, next) => {
         success: false,
         message: `User '${req.params.username}' not found`,
       });
+    }
+
+    // RBAC: Staff can view ONLY their own personal information
+    if (req.user.role === 'staff') {
+      if (user.username.toLowerCase() !== req.user.username.toLowerCase()) {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied — staff members can only view their own personal information",
+        });
+      }
     }
 
     res.json({ success: true, user });
@@ -90,11 +127,24 @@ const getUserByUsername = async (req, res, next) => {
 
 /**
  * POST /api/users/staff
- * Admin only — create a new staff account with a branch assignment.
+ * Admin only — create a new staff account with personal details and branch assignment.
  */
 const createStaff = async (req, res, next) => {
   try {
-    const { username, name, email, phone, password, int_Branch_Id } = req.body;
+    const {
+      username,
+      name,
+      email,
+      phone,
+      password,
+      int_Branch_Id,
+      employeeId,
+      address,
+      dateOfBirth,
+      emergencyContactName,
+      emergencyContactPhone,
+      accountStatus,
+    } = req.body;
 
     const existing = await User.findOne({
       username: username.toLowerCase().trim(),
@@ -106,6 +156,10 @@ const createStaff = async (req, res, next) => {
       });
     }
 
+    // Auto-generate employeeId if omitted
+    const assignedEmployeeId = employeeId?.trim() || `EMP-${Date.now().toString().slice(-4)}`;
+    const status = accountStatus || 'Active';
+
     const staff = await User.create({
       username: username.trim(),
       password,
@@ -114,12 +168,117 @@ const createStaff = async (req, res, next) => {
       phone: phone?.trim() || '',
       role: 'staff',
       int_Branch_Id: Number(int_Branch_Id),
+      employeeId: assignedEmployeeId,
+      address: address?.trim() || '',
+      dateOfBirth: dateOfBirth?.trim() || '',
+      emergencyContactName: emergencyContactName?.trim() || '',
+      emergencyContactPhone: emergencyContactPhone?.trim() || '',
+      accountStatus: status,
+      active: status === 'Active',
       authProvider: 'local',
     });
 
     res.status(201).json({
       success: true,
-      message: 'Staff account created',
+      message: 'Staff account created successfully',
+      user: staff.toSessionObject(),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * PUT /api/users/staff/:username
+ * Admin only — update a staff member's personal information, branch assignment, or status.
+ */
+const updateStaff = async (req, res, next) => {
+  try {
+    const targetUsername = req.params.username.toLowerCase().trim();
+    const staff = await User.findOne({ username: targetUsername, role: 'staff' });
+
+    if (!staff) {
+      return res.status(404).json({
+        success: false,
+        message: `Staff account '${req.params.username}' not found`,
+      });
+    }
+
+    const updatableFields = [
+      'name',
+      'email',
+      'phone',
+      'address',
+      'employeeId',
+      'dateOfBirth',
+      'emergencyContactName',
+      'emergencyContactPhone',
+      'int_Branch_Id',
+      'accountStatus',
+      'active',
+    ];
+
+    updatableFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        if (field === 'int_Branch_Id') {
+          staff.int_Branch_Id = Number(req.body.int_Branch_Id);
+        } else if (typeof req.body[field] === 'string') {
+          staff[field] = req.body[field].trim();
+        } else {
+          staff[field] = req.body[field];
+        }
+      }
+    });
+
+    if (req.body.accountStatus) {
+      staff.active = req.body.accountStatus === 'Active';
+    } else if (req.body.active !== undefined) {
+      staff.accountStatus = req.body.active ? 'Active' : 'Deactivated';
+    }
+
+    await staff.save();
+
+    res.json({
+      success: true,
+      message: `Staff '${staff.username}' updated successfully`,
+      user: staff.toSessionObject(),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * PATCH /api/users/staff/:username/status
+ * Admin only — set staff account status ('Active', 'Pending Approval', 'Deactivated') / approve staff.
+ */
+const updateStaffStatus = async (req, res, next) => {
+  try {
+    const { status } = req.body;
+    if (!['Active', 'Pending Approval', 'Deactivated'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Status must be Active, Pending Approval, or Deactivated',
+      });
+    }
+
+    const targetUsername = req.params.username.toLowerCase().trim();
+    const staff = await User.findOne({ username: targetUsername, role: 'staff' });
+
+    if (!staff) {
+      return res.status(404).json({
+        success: false,
+        message: `Staff account '${req.params.username}' not found`,
+      });
+    }
+
+    staff.accountStatus = status;
+    staff.active = status === 'Active';
+    await staff.save();
+
+    res.json({
+      success: true,
+      message: `Staff '${staff.username}' status set to ${status}`,
       user: staff.toSessionObject(),
     });
   } catch (err) {
@@ -153,6 +312,7 @@ const toggleUserStatus = async (req, res, next) => {
     }
 
     user.active = !user.active;
+    user.accountStatus = user.active ? 'Active' : 'Deactivated';
     await user.save();
 
     res.json({
@@ -204,6 +364,9 @@ module.exports = {
   getUserByUsername,
   createStaff,
   createStaffRules,
+  updateStaff,
+  updateStaffRules,
+  updateStaffStatus,
   toggleUserStatus,
   deleteUser,
 };

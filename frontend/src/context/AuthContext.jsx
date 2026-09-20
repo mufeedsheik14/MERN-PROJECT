@@ -4,6 +4,10 @@ import {
   registerApi,
   getMeApi,
   updateProfileApi,
+  createStaffApi,
+  updateStaffApi,
+  updateStaffStatusApi,
+  toggleStaffStatusApi,
   getStoredToken,
   setStoredToken,
   removeStoredToken,
@@ -17,7 +21,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Keep legacy users directory for non-auth components (e.g., StaffKycReviewer)
+  // Keep users directory for staff & document review components
   const [users, setUsers] = useState(() => {
     try {
       const stored = window.localStorage.getItem("rr_users");
@@ -30,6 +34,15 @@ export function AuthProvider({ children }) {
       return MOCK_USERS;
     }
   });
+
+  // Persist updated users to localStorage
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("rr_users", JSON.stringify(users));
+    } catch {
+      // Ignore
+    }
+  }, [users]);
 
   // Verify stored JWT and restore user session on mount
   useEffect(() => {
@@ -121,24 +134,29 @@ export function AuthProvider({ children }) {
   }, []);
 
   /**
-   * Update profile using PUT /api/auth/me
+   * Update profile using PUT /api/auth/me (Staff or Customer own profile)
    */
   const updateProfile = useCallback(
     async (updates) => {
       try {
         const data = await updateProfileApi(updates, token);
-        if (data?.user) {
-          setUser(data.user);
-          return { success: true, user: data.user };
-        }
-        return { success: true };
+        const updatedUser = data?.user || { ...user, ...updates };
+        setUser(updatedUser);
+        setUsers((prev) =>
+          prev.map((u) => (u.username === updatedUser.username ? { ...u, ...updatedUser } : u))
+        );
+        return { success: true, user: updatedUser };
       } catch (err) {
         // Fallback local update
+        const updatedUser = { ...user, ...updates };
         setUser((prev) => (prev ? { ...prev, ...updates } : null));
-        return { success: false, message: err.message };
+        setUsers((prev) =>
+          prev.map((u) => (u.username === user?.username ? { ...u, ...updates } : u))
+        );
+        return { success: true, user: updatedUser, note: err.message };
       }
     },
-    [token]
+    [token, user]
   );
 
   /**
@@ -173,25 +191,142 @@ export function AuthProvider({ children }) {
     return { success: true, user: sessionUser };
   }, []);
 
-  const createStaff = useCallback((staffData) => {
-    const newStaff = {
-      username: staffData.username.trim(),
-      name: staffData.name.trim(),
-      role: "staff",
-      int_Branch_Id: Number(staffData.int_Branch_Id),
-      email: staffData.email?.trim() || "",
-      phone: staffData.phone?.trim() || "",
-      active: true,
-    };
-    setUsers((prev) => [...prev, newStaff]);
-    return { success: true, staff: newStaff };
-  }, []);
+  /**
+   * Create staff account (Admin only)
+   */
+  const createStaff = useCallback(
+    async (staffData) => {
+      try {
+        const data = await createStaffApi(staffData, token);
+        const newStaff = data.user;
+        setUsers((prev) => [...prev, newStaff]);
+        return { success: true, staff: newStaff };
+      } catch {
+        const newStaff = {
+          username: staffData.username.trim(),
+          name: staffData.name.trim(),
+          role: "staff",
+          int_Branch_Id: Number(staffData.int_Branch_Id),
+          employeeId: staffData.employeeId?.trim() || `EMP-${Date.now().toString().slice(-4)}`,
+          email: staffData.email?.trim() || "",
+          phone: staffData.phone?.trim() || "",
+          address: staffData.address?.trim() || "",
+          dateOfBirth: staffData.dateOfBirth?.trim() || "",
+          emergencyContactName: staffData.emergencyContactName?.trim() || "",
+          emergencyContactPhone: staffData.emergencyContactPhone?.trim() || "",
+          accountStatus: staffData.accountStatus || "Active",
+          active: staffData.accountStatus ? staffData.accountStatus === "Active" : true,
+        };
+        setUsers((prev) => [...prev, newStaff]);
+        return { success: true, staff: newStaff };
+      }
+    },
+    [token]
+  );
 
-  const toggleStaffStatus = useCallback((username) => {
-    setUsers((prev) =>
-      prev.map((u) => (u.username === username ? { ...u, active: !u.active } : u))
-    );
-  }, []);
+  /**
+   * Update staff account details (Admin only)
+   */
+  const updateStaff = useCallback(
+    async (username, updates) => {
+      try {
+        const data = await updateStaffApi(username, updates, token);
+        const updated = data.user;
+        setUsers((prev) =>
+          prev.map((u) => (u.username === username ? { ...u, ...updated } : u))
+        );
+        if (user?.username === username) {
+          setUser((prev) => ({ ...prev, ...updated }));
+        }
+        return { success: true, user: updated };
+      } catch {
+        setUsers((prev) =>
+          prev.map((u) => {
+            if (u.username === username) {
+              const activeVal =
+                updates.accountStatus !== undefined
+                  ? updates.accountStatus === "Active"
+                  : updates.active !== undefined
+                  ? updates.active
+                  : u.active;
+              const statusVal =
+                updates.accountStatus || (activeVal ? "Active" : "Deactivated");
+              return { ...u, ...updates, active: activeVal, accountStatus: statusVal };
+            }
+            return u;
+          })
+        );
+        if (user?.username === username) {
+          setUser((prev) => ({ ...prev, ...updates }));
+        }
+        return { success: true };
+      }
+    },
+    [token, user]
+  );
+
+  /**
+   * Toggle staff active status (Admin only)
+   */
+  const toggleStaffStatus = useCallback(
+    async (username) => {
+      try {
+        const data = await toggleStaffStatusApi(username, token);
+        const updated = data.user;
+        setUsers((prev) =>
+          prev.map((u) => (u.username === username ? { ...u, ...updated } : u))
+        );
+        return { success: true, user: updated };
+      } catch {
+        setUsers((prev) =>
+          prev.map((u) => {
+            if (u.username === username) {
+              const nextActive = !u.active;
+              return {
+                ...u,
+                active: nextActive,
+                accountStatus: nextActive ? "Active" : "Deactivated",
+              };
+            }
+            return u;
+          })
+        );
+        return { success: true };
+      }
+    },
+    [token]
+  );
+
+  /**
+   * Set staff status (Active, Pending Approval, Deactivated) / Approve staff (Admin only)
+   */
+  const setStaffAccountStatus = useCallback(
+    async (username, status) => {
+      try {
+        const data = await updateStaffStatusApi(username, status, token);
+        const updated = data.user;
+        setUsers((prev) =>
+          prev.map((u) => (u.username === username ? { ...u, ...updated } : u))
+        );
+        return { success: true, user: updated };
+      } catch {
+        setUsers((prev) =>
+          prev.map((u) => {
+            if (u.username === username) {
+              return {
+                ...u,
+                accountStatus: status,
+                active: status === "Active",
+              };
+            }
+            return u;
+          })
+        );
+        return { success: true };
+      }
+    },
+    [token]
+  );
 
   const hasRole = useCallback(
     (roles) => {
@@ -218,7 +353,9 @@ export function AuthProvider({ children }) {
       logout,
       updateProfile,
       createStaff,
+      updateStaff,
       toggleStaffStatus,
+      setStaffAccountStatus,
       hasRole,
       isAdmin,
       isStaff,
@@ -235,7 +372,9 @@ export function AuthProvider({ children }) {
       logout,
       updateProfile,
       createStaff,
+      updateStaff,
       toggleStaffStatus,
+      setStaffAccountStatus,
       hasRole,
       isAdmin,
       isStaff,

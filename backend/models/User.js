@@ -66,6 +66,32 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    employeeId: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    dateOfBirth: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    emergencyContactName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    emergencyContactPhone: {
+      type: String,
+      trim: true,
+      default: '',
+      match: [/^(\d{10})?$/, 'Emergency contact phone must be 10 digits or empty'],
+    },
+    accountStatus: {
+      type: String,
+      enum: ['Active', 'Pending Approval', 'Deactivated'],
+      default: 'Active',
+    },
 
     // ── Address fields (customer profile page) ────────────────
     address: { type: String, trim: true, default: '' },
@@ -98,9 +124,17 @@ const userSchema = new mongoose.Schema(
 // ── Indexes ───────────────────────────────────────────────────
 userSchema.index({ email: 1 });
 userSchema.index({ role: 1 });
+userSchema.index({ employeeId: 1 });
 
-// ── Pre-save hook: hash password before storing ───────────────
+// ── Pre-save hook: hash password before storing & sync status ──
 userSchema.pre('save', async function (next) {
+  // Sync active boolean and accountStatus if one changed
+  if (this.isModified('accountStatus')) {
+    this.active = this.accountStatus === 'Active';
+  } else if (this.isModified('active')) {
+    this.accountStatus = this.active ? 'Active' : 'Deactivated';
+  }
+
   // Only hash if the password field was modified (or is new)
   if (!this.isModified('password') || !this.password) return next();
 
@@ -125,6 +159,11 @@ userSchema.methods.toSessionObject = function () {
     email: this.email,
     phone: this.phone,
     int_Branch_Id: this.int_Branch_Id,
+    employeeId: this.employeeId || '',
+    dateOfBirth: this.dateOfBirth || '',
+    emergencyContactName: this.emergencyContactName || '',
+    emergencyContactPhone: this.emergencyContactPhone || '',
+    accountStatus: this.accountStatus || (this.active ? 'Active' : 'Deactivated'),
     address: this.address,
     addressLine2: this.addressLine2,
     city: this.city,

@@ -4,11 +4,13 @@ import { useAuth } from "../../context/AuthContext";
 import { useBookings } from "../../context/BookingContext";
 import { useFleet } from "../../context/FleetContext";
 import { useCustomerDocuments } from "../../context/CustomerDocumentContext";
+import { useSearchParams } from "react-router-dom";
 import ConfirmModal from "../ConfirmModal";
 import StaffDocumentManager from "../documents/StaffDocumentManager";
 import StaffKycReviewer from "../documents/StaffKycReviewer";
 import FleetLiveTracking from "./FleetLiveTracking";
 import AddVehicleModal from "./AddVehicleModal";
+import StaffProfileCard from "./StaffProfileCard";
 import {
   bookingStatuses,
   getBranchName,
@@ -24,7 +26,9 @@ export default function StaffDashboard() {
   const { bookings, updateBookingStatus, cancelBooking } = useBookings();
   const { vehicles, setVehicleStatus } = useFleet();
 
-  const [activeTab, setActiveTab] = useState("bookings"); // "bookings" | "fleet" | "documents" | "kyc" | "tracking"
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get("tab") || "bookings";
+  const [activeTab, setActiveTab] = useState(initialTab); // "bookings" | "fleet" | "documents" | "kyc" | "tracking" | "profile"
   const [modalConfig, setModalConfig] = useState({ isOpen: false });
   const [searchQuery, setSearchQuery] = useState("");
   const [trackingBookingId, setTrackingBookingId] = useState(null);
@@ -266,6 +270,25 @@ export default function StaffDashboard() {
           }}
         >
           🛰️ Live Tracking ({branchOngoingCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("profile")}
+          style={{
+            padding: "10px 18px",
+            background: "none",
+            border: "none",
+            borderBottom: activeTab === "profile" ? "3px solid var(--accent)" : "3px solid transparent",
+            fontWeight: 700,
+            fontSize: "0.92rem",
+            color: activeTab === "profile" ? "var(--accent)" : "var(--text-muted)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+          }}
+        >
+          👤 Staff Profile
         </button>
       </div>
 
@@ -559,6 +582,11 @@ export default function StaffDashboard() {
           </div>
           <FleetLiveTracking branchFilter={user?.int_Branch_Id} initialBookingId={trackingBookingId} />
         </div>
+      )}
+
+      {/* TAB 6: STAFF PROFILE */}
+      {activeTab === "profile" && (
+        <StaffProfileCard />
       )}
 
       {/* Add Vehicle Modal */}
