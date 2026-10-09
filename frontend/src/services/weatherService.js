@@ -5,8 +5,7 @@
  * to retrieve real-time destination weather for vehicle recommendations.
  * Secrets/API keys stay strictly on the backend.
  */
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import { API_BASE_URL } from "./apiConfig";
 
 export async function fetchDestinationWeather(destination) {
   if (!destination || !destination.trim()) {

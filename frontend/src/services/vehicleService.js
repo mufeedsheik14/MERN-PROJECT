@@ -1,8 +1,8 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import { API_BASE_URL } from "./apiConfig";
 
 /**
  * Fetch vehicles from the backend API with automatic retry (max 2 retries).
- * Calls GET http://localhost:5000/api/vehicles
+ * Calls GET /api/vehicles
  *
  * @param {Object} [params] - Optional query parameters (category, branch, fuel, search, etc.)
  * @param {number} [retries=2] - Maximum number of retries on network/startup failure
@@ -22,10 +22,15 @@ export async function fetchVehicles(params = {}, retries = 2, delayMs = 600) {
 
   let lastError;
   for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
     try {
       const response = await fetch(url, {
         method: "GET",
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         let message = `Failed to fetch vehicles (Status ${response.status})`;
@@ -74,10 +79,15 @@ export async function fetchVehicleById(id, retries = 2, delayMs = 500) {
 
   let lastError;
   for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
     try {
       const response = await fetch(url, {
         method: "GET",
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         let message = `Failed to fetch vehicle ${id} (Status ${response.status})`;

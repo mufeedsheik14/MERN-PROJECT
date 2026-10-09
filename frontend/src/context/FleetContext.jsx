@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { fetchVehicles } from "../services/vehicleService";
 import {
+  vehicles as initialVehicles,
   coupons as initialCoupons,
   categories as initialCategories,
   brands as initialBrands,
@@ -25,8 +26,8 @@ function loadStoredCoupons() {
 }
 
 export function FleetProvider({ children }) {
-  const [vehicles, setVehicles] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [vehicles, setVehicles] = useState(initialVehicles);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [coupons, setCoupons] = useState(loadStoredCoupons);
   const [categories, setCategories] = useState(initialCategories);
@@ -47,14 +48,18 @@ export function FleetProvider({ children }) {
     const promise = (async () => {
       try {
         const data = await fetchVehicles();
-        if (Array.isArray(data)) {
+        if (Array.isArray(data) && data.length > 0) {
           setVehicles(data);
           setError(null);
+        } else {
+          setVehicles((prev) => (prev && prev.length > 0 ? prev : initialVehicles));
         }
         return data;
       } catch (err) {
-        setError(err.message || "Failed to load vehicles from server.");
-        throw err;
+        console.warn("API fleet fetch issue, using local fleet data:", err.message);
+        setVehicles((prev) => (prev && prev.length > 0 ? prev : initialVehicles));
+        setError(null);
+        return initialVehicles;
       } finally {
         setLoading(false);
         inFlightPromiseRef.current = null;

@@ -15,6 +15,14 @@ import {
   getCategoryName,
   getBrandName,
 } from "../../data/mockData";
+import ChartCard from "../charts/ChartCard";
+import KpiStatsGrid from "../charts/KpiStatsGrid";
+import RevenueTrendChart from "../charts/RevenueTrendChart";
+import VehicleUtilizationChart from "../charts/VehicleUtilizationChart";
+import StatusDonutChart from "../charts/StatusDonutChart";
+import BranchPerformanceChart from "../charts/BranchPerformanceChart";
+import ReportsExportSection from "./ReportsExportSection";
+
 
 export default function AdminDashboard() {
   const { t } = useLanguage();
@@ -138,14 +146,29 @@ export default function AdminDashboard() {
   const topVehicles = useMemo(() => {
     const counts = {};
     bookings.forEach((b) => {
-      const key = b.vehicleLabel || String(b.int_Vehicle_Id);
+      let label = b.vehicleLabel;
+      if (!label && b.int_Vehicle_Id) {
+        const v = vehicles.find((veh) => veh.int_Vehicle_Id === b.int_Vehicle_Id);
+        if (v) {
+          const brandName = (v.int_Brand_Id ? getBrandName(v.int_Brand_Id) : v.brand) || "";
+          const modelName = v.txt_Model_Name || v.model || v.name || "";
+          if (brandName && modelName) {
+            label = modelName.toLowerCase().includes(brandName.toLowerCase())
+              ? modelName
+              : `${brandName} ${modelName}`;
+          } else {
+            label = brandName || modelName;
+          }
+        }
+      }
+      const key = label || (b.int_Vehicle_Id ? `Vehicle #${b.int_Vehicle_Id}` : "Unknown Vehicle");
       counts[key] = (counts[key] || 0) + 1;
     });
     return Object.entries(counts)
       .sort(([, a], [, b]) => b - a)
       .slice(0, 5)
       .map(([name, count]) => ({ name, count }));
-  }, [bookings]);
+  }, [bookings, vehicles]);
 
   // Status Breakdown
   const statusCounts = useMemo(() => {
@@ -154,6 +177,80 @@ export default function AdminDashboard() {
       return { ...s, count };
     });
   }, [bookings]);
+
+  // Revenue & Booking Trend Time-Series Data
+  const trendData = useMemo(() => {
+    if (!bookings || bookings.length === 0) return [];
+    const groups = {};
+    const sorted = [...bookings].sort((a, b) => {
+      const da = new Date(a.dte_Rental_Start_Date || a.createdAt || Date.now());
+      const db = new Date(b.dte_Rental_Start_Date || b.createdAt || Date.now());
+      return da - db;
+    });
+
+    sorted.forEach((b) => {
+      const d = new Date(b.dte_Rental_Start_Date || b.createdAt || Date.now());
+      const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      if (!groups[label]) {
+        groups[label] = { label, date: d.toISOString().slice(0, 10), revenue: 0, bookings: 0 };
+      }
+      groups[label].revenue += b.dbl_Net_Amount || 0;
+      groups[label].bookings += 1;
+    });
+
+    return Object.values(groups);
+  }, [bookings]);
+
+  // Vehicle Utilization List Data
+  const vehicleUtilizationData = useMemo(() => {
+    return vehicles.map((v) => {
+      const vBookings = bookings.filter((b) => b.int_Vehicle_Id === v.int_Vehicle_Id);
+      const rev = vBookings.reduce((sum, b) => sum + (b.dbl_Net_Amount || 0), 0);
+      const brandName = (v.int_Brand_Id ? getBrandName(v.int_Brand_Id) : v.brand) || "";
+      const modelName = v.txt_Model_Name || v.model || v.name || "";
+      let vehicleName = "";
+      if (brandName && modelName) {
+        vehicleName = modelName.toLowerCase().includes(brandName.toLowerCase())
+          ? modelName
+          : `${brandName} ${modelName}`;
+      } else {
+        vehicleName = brandName || modelName || (v.int_Vehicle_Id ? `Vehicle #${v.int_Vehicle_Id}` : (v.id ? `Vehicle #${v.id}` : "Unknown Vehicle"));
+      }
+      const regNumber = v.txt_Registration_Number || v.plateNumber || v.regNumber || "";
+
+      return {
+        id: v.int_Vehicle_Id,
+        name: vehicleName,
+        plate: regNumber,
+        category: getCategoryName(v.int_Category_Id),
+        count: vBookings.length,
+        revenue: rev,
+        status: v.txt_Vehicle_Status,
+      };
+    });
+  }, [vehicles, bookings]);
+
+  // Status Breakdown for Donut Chart
+  const statusChartData = useMemo(() => {
+    const statusColorMap = {
+      1: "#f59e0b", // Pending - amber
+      2: "#3b82f6", // Confirmed - blue
+      3: "#8b5cf6", // Ongoing - purple
+      4: "#10b981", // Completed - green
+      5: "#ef4444", // Cancelled - red
+    };
+
+    return bookingStatuses.map((s) => {
+      const count = bookings.filter((b) => b.int_Booking_Status_Id === s.int_Booking_Status_Id).length;
+      return {
+        id: s.int_Booking_Status_Id,
+        label: t(s.key),
+        count,
+        color: statusColorMap[s.int_Booking_Status_Id] || "#64748b",
+      };
+    });
+  }, [bookings, t]);
+
 
   // Filtered Bookings for "All Bookings" Tab
   const filteredBookings = useMemo(() => {
@@ -346,6 +443,7 @@ export default function AdminDashboard() {
       >
         {[
           { id: "analytics", label: `📊 ${t("tab_analytics")}` },
+          { id: "reports", label: `📗 Reports / Export` },
           { id: "fleet", label: `🚘 ${t("tab_fleet")} (${vehicles.length})` },
           { id: "staff", label: `👥 ${t("tab_staff")} (${staffList.length})` },
           { id: "coupons", label: `🏷️ ${t("tab_coupons")} (${coupons.length})` },
@@ -377,107 +475,131 @@ export default function AdminDashboard() {
       {/* TAB 1: GLOBAL ANALYTICS */}
       {activeTab === "analytics" && (
         <div>
-          <div className="stat-grid" style={{ margin: "0 0 32px 0" }}>
-            <div className="stat-card" style={{ borderLeftColor: "#8b5cf6" }}>
-              <div className="stat-label">{t("total_revenue")}</div>
-              <div className="stat-value">₹{stats.totalRevenue.toLocaleString("en-IN")}</div>
-            </div>
-            <div className="stat-card" style={{ borderLeftColor: "var(--signal-green)" }}>
-              <div className="stat-label">{t("fleet_utilization")}</div>
-              <div className="stat-value">{stats.utilization}%</div>
-            </div>
-            <div className="stat-card" style={{ borderLeftColor: "var(--accent)" }}>
-              <div className="stat-label">{t("total_vehicles")}</div>
-              <div className="stat-value">{stats.totalVehicles}</div>
-            </div>
-            <div className="stat-card" style={{ borderLeftColor: "var(--signal-amber)" }}>
-              <div className="stat-label">{t("active_bookings")}</div>
-              <div className="stat-value">{stats.activeBookings}</div>
-            </div>
+          {/* Executive KPI Cards */}
+          <KpiStatsGrid
+            items={[
+              {
+                title: t("total_revenue"),
+                value: `₹${stats.totalRevenue.toLocaleString("en-IN")}`,
+                icon: "💰",
+                color: "#10b981",
+                badge: "Gross Revenue",
+                subtitle: `Across ${bookings.length} reservations`,
+              },
+              {
+                title: t("total_bookings"),
+                value: `${stats.totalBookings} Rides`,
+                icon: "📋",
+                color: "#3b82f6",
+                badge: "All Time",
+                subtitle: `${stats.activeBookings} active reservations`,
+              },
+              {
+                title: "Active Rentals",
+                value: ongoingRentalsCount || stats.activeBookings,
+                icon: "🚗",
+                color: "#8b5cf6",
+                badge: "On Road",
+                subtitle: "Vehicles with customers right now",
+              },
+              {
+                title: t("fleet_utilization"),
+                value: `${stats.utilization}%`,
+                icon: "⚡",
+                color: "#f59e0b",
+                badge: `${stats.totalVehicles} Vehicles`,
+                subtitle: `${stats.maintenanceVehicles} in maintenance`,
+              },
+            ]}
+          />
+
+          {/* Row 1: Revenue Trends & Booking Status Donut */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
+              gap: "24px",
+              marginBottom: "24px",
+            }}
+          >
+            {/* Revenue & Booking Trends Area Chart */}
+            <ChartCard
+              title="Revenue & Booking Trends"
+              subtitle="Daily revenue (₹) and rental volume over time"
+              icon="📈"
+              badge="Live Data"
+              empty={trendData.length === 0}
+              emptyMessage="No booking transactions recorded yet."
+            >
+              <RevenueTrendChart data={trendData} height={230} activeMetric="both" />
+            </ChartCard>
+
+            {/* Booking Lifecycle Breakdown Donut Chart */}
+            <ChartCard
+              title="Booking Status Breakdown"
+              subtitle="Proportions across active, completed, and cancelled trips"
+              icon="🎯"
+              badge={`${bookings.length} Total`}
+              empty={bookings.length === 0}
+              emptyMessage="No booking status records available."
+            >
+              <StatusDonutChart
+                data={statusChartData}
+                size={170}
+                strokeWidth={24}
+                centerSubtitle="Total Rides"
+              />
+            </ChartCard>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "28px", marginBottom: "36px" }}>
-            {/* Branch Performance */}
-            <div style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "20px" }}>
-              <h3 style={{ marginTop: 0, marginBottom: "16px" }}>{t("branch_performance")}</h3>
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                {branchPerformance.map((b) => (
-                  <div
-                    key={b.id}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      padding: "12px 14px",
-                      background: "var(--bg-inset)",
-                      borderRadius: "8px",
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 600 }}>{b.name}</div>
-                      <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-                        {b.fleetCount} vehicles · {b.bookingCount} bookings
-                      </div>
-                    </div>
-                    <div style={{ fontWeight: 700, fontFamily: "var(--font-display)", fontSize: "1.1rem" }}>
-                      ₹{b.revenue.toLocaleString("en-IN")}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+          {/* Row 2: Vehicle Utilization Ranking & Branch Performance */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))",
+              gap: "24px",
+              marginBottom: "36px",
+            }}
+          >
+            {/* Vehicle Utilization Bar Chart */}
+            <ChartCard
+              title="Vehicle Utilization"
+              subtitle="Ranking fleet vehicles by booking frequency and days on road"
+              icon="🏎️"
+              badge={`${vehicles.length} Vehicles`}
+              empty={vehicleUtilizationData.length === 0}
+              emptyMessage="No fleet vehicles available."
+            >
+              <VehicleUtilizationChart
+                vehicles={vehicleUtilizationData}
+                maxItems={6}
+                showToggle={true}
+              />
+            </ChartCard>
 
-            {/* Top Vehicles & Status Breakdown */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-              <div style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "20px" }}>
-                <h3 style={{ marginTop: 0, marginBottom: "14px" }}>{t("top_vehicles")}</h3>
-                {topVehicles.length === 0 ? (
-                  <p style={{ color: "var(--text-muted)" }}>No booking activity yet.</p>
-                ) : (
-                  topVehicles.map((v) => (
-                    <div
-                      key={v.name}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        padding: "8px 0",
-                        borderBottom: "1px solid var(--border)",
-                        fontSize: "0.9rem",
-                      }}
-                    >
-                      <span>🚗 {v.name}</span>
-                      <span style={{ fontWeight: 700 }}>{v.count} bookings</span>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "20px" }}>
-                <h3 style={{ marginTop: 0, marginBottom: "14px" }}>Booking Lifecycle Breakdown</h3>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                  {statusCounts.map((s) => (
-                    <div
-                      key={s.key}
-                      style={{
-                        padding: "8px 14px",
-                        background: "var(--bg-inset)",
-                        borderRadius: "8px",
-                        fontSize: "0.85rem",
-                        display: "flex",
-                        gap: "8px",
-                        alignItems: "center",
-                      }}
-                    >
-                      <span className={`badge badge-${s.int_Booking_Status_Id}`}>{t(s.key)}</span>
-                      <span style={{ fontWeight: 700 }}>{s.count}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            {/* Branch Performance Comparison */}
+            <ChartCard
+              title={t("branch_performance")}
+              subtitle="Multi-location revenue, fleet inventory, and rental volume"
+              icon="🏢"
+              badge={`${branchPerformance.length} Hubs`}
+              empty={branchPerformance.length === 0}
+              emptyMessage="No branch data available."
+            >
+              <BranchPerformanceChart branches={branchPerformance} />
+            </ChartCard>
           </div>
+
+          {/* Row 3: Reports & Export Section */}
+          <ReportsExportSection role="admin" />
         </div>
       )}
+
+      {/* TAB: REPORTS & EXPORT DIRECT VIEW */}
+      {activeTab === "reports" && (
+        <ReportsExportSection role="admin" />
+      )}
+
 
       {/* TAB 2: FLEET INVENTORY */}
       {activeTab === "fleet" && (
@@ -924,12 +1046,24 @@ export default function AdminDashboard() {
             filteredBookings.map((b) => (
               <div className="booking-row" key={b.txt_Booking_Number} style={{ marginBottom: "12px" }}>
                 <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                     <span style={{ fontWeight: 700, fontFamily: "var(--font-display)" }}>
                       #{b.txt_Booking_Number}
                     </span>
                     <span style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
                       ({b.customerName || "Customer"})
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "0.72rem",
+                        fontWeight: 700,
+                        padding: "2px 8px",
+                        borderRadius: "6px",
+                        background: b.paymentStatus === "Paid" ? "rgba(16, 185, 129, 0.15)" : b.paymentStatus === "Failed" ? "rgba(239, 68, 68, 0.15)" : "var(--accent-subtle)",
+                        color: b.paymentStatus === "Paid" ? "var(--signal-green)" : b.paymentStatus === "Failed" ? "var(--signal-red)" : "var(--accent)",
+                      }}
+                    >
+                      Payment: {b.paymentStatus || "Pending"}
                     </span>
                   </div>
                   <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "2px" }}>
@@ -938,6 +1072,13 @@ export default function AdminDashboard() {
                   <div style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
                     Dates: {b.dte_Pickup_Date} → {b.dte_Return_Date} ({b.int_Total_Days} days)
                   </div>
+                  {b.paymentStatus === "Paid" && (
+                    <div style={{ fontSize: "0.74rem", color: "var(--text-muted)", marginTop: "4px", background: "var(--bg-base, #0d1117)", padding: "3px 8px", borderRadius: "4px", border: "1px solid var(--border)" }}>
+                      💳 Razorpay ID: <strong style={{ color: "var(--signal-green)" }}>{b.razorpayPaymentId || "-"}</strong>
+                      {b.razorpayOrderId && <span> · Order: <code>{b.razorpayOrderId}</code></span>}
+                      {b.paidAt && <span> · Paid At: {new Date(b.paidAt).toLocaleString()}</span>}
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
@@ -1481,7 +1622,7 @@ export default function AdminDashboard() {
           <div style={{ marginBottom: "20px" }}>
             <h2 style={{ margin: "0 0 4px 0", fontSize: "1.4rem" }}>Global Fleet Live GPS Tracking</h2>
             <p style={{ color: "var(--text-muted)", margin: 0, fontSize: "0.88rem" }}>
-              Active rental vehicle tracking across all branch corridors with simulated GPS coordinates and trip stats.
+              Active rental vehicle tracking across all branch corridors with live phone GPS telemetry and trip stats.
             </p>
           </div>
           <FleetLiveTracking initialBookingId={trackingBookingId} />

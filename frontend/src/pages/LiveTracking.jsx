@@ -42,7 +42,7 @@ export default function LiveTracking() {
           </div>
           <h1 style={{ margin: 0, fontSize: "1.9rem" }}>🛰️ Live Fleet Telemetry & GPS Tracking</h1>
           <p style={{ color: "var(--text-muted)", margin: "4px 0 0 0", fontSize: "0.9rem" }}>
-            Real-time GPS movement simulation, route corridor tracking, distance metrics, and ETA telemetry.
+            Real-time phone GPS telemetry, live fleet map tracking, speed metrics, and trip status updates.
           </p>
         </div>
       </div>

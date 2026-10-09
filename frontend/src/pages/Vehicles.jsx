@@ -9,6 +9,7 @@ import {
   getCategoryName,
   matchCategory,
   filterCategories,
+  getCategoryIdFromFilter,
 } from "../data/mockData";
 
 const DEFAULT_FILTERS = {
@@ -176,7 +177,10 @@ export default function Vehicles() {
           .filter((fc) => fc.id)
           .map((c) => {
             const count = categoryCounts[c.id] || 0;
-            const isActive = filters.category === c.id;
+            const isActive =
+              filters.category === c.id ||
+              (Boolean(filters.category) &&
+                getCategoryIdFromFilter(filters.category) === getCategoryIdFromFilter(c.id));
             return (
               <button
                 key={c.id}

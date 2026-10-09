@@ -19,6 +19,12 @@ import {
   getFuelName,
   getTransmissionName,
 } from "../../data/mockData";
+import ChartCard from "../charts/ChartCard";
+import RevenueTrendChart from "../charts/RevenueTrendChart";
+import VehicleUtilizationChart from "../charts/VehicleUtilizationChart";
+import StatusDonutChart from "../charts/StatusDonutChart";
+import ReportsExportSection from "./ReportsExportSection";
+
 
 export default function StaffDashboard() {
   const { t } = useLanguage();
@@ -87,6 +93,80 @@ export default function StaffDashboard() {
         b.vehicleLabel?.toLowerCase().includes(query)
     );
   }, [branchBookings, searchQuery]);
+
+  // Branch Rental Trend Time-Series Data
+  const branchTrendData = useMemo(() => {
+    if (!branchBookings || branchBookings.length === 0) return [];
+    const groups = {};
+    const sorted = [...branchBookings].sort((a, b) => {
+      const da = new Date(a.dte_Rental_Start_Date || a.createdAt || Date.now());
+      const db = new Date(b.dte_Rental_Start_Date || b.createdAt || Date.now());
+      return da - db;
+    });
+
+    sorted.forEach((b) => {
+      const d = new Date(b.dte_Rental_Start_Date || b.createdAt || Date.now());
+      const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      if (!groups[label]) {
+        groups[label] = { label, date: d.toISOString().slice(0, 10), revenue: 0, bookings: 0 };
+      }
+      groups[label].revenue += b.dbl_Net_Amount || 0;
+      groups[label].bookings += 1;
+    });
+
+    return Object.values(groups);
+  }, [branchBookings]);
+
+  // Branch Booking Status Distribution for Donut Chart
+  const branchStatusData = useMemo(() => {
+    const statusColorMap = {
+      1: "#f59e0b",
+      2: "#3b82f6",
+      3: "#8b5cf6",
+      4: "#10b981",
+      5: "#ef4444",
+    };
+
+    return bookingStatuses.map((s) => {
+      const count = branchBookings.filter((b) => b.int_Booking_Status_Id === s.int_Booking_Status_Id).length;
+      return {
+        id: s.int_Booking_Status_Id,
+        label: t(s.key),
+        count,
+        color: statusColorMap[s.int_Booking_Status_Id] || "#64748b",
+      };
+    });
+  }, [branchBookings, t]);
+
+  // Branch Vehicle Utilization Data
+  const branchFleetUtilizationData = useMemo(() => {
+    return branchVehicles.map((v) => {
+      const vBookings = branchBookings.filter((b) => b.int_Vehicle_Id === v.int_Vehicle_Id);
+      const rev = vBookings.reduce((sum, b) => sum + (b.dbl_Net_Amount || 0), 0);
+      const brandName = (v.int_Brand_Id ? getBrandName(v.int_Brand_Id) : v.brand) || "";
+      const modelName = v.txt_Model_Name || v.model || v.name || "";
+      let vehicleName = "";
+      if (brandName && modelName) {
+        vehicleName = modelName.toLowerCase().includes(brandName.toLowerCase())
+          ? modelName
+          : `${brandName} ${modelName}`;
+      } else {
+        vehicleName = brandName || modelName || (v.int_Vehicle_Id ? `Vehicle #${v.int_Vehicle_Id}` : (v.id ? `Vehicle #${v.id}` : "Unknown Vehicle"));
+      }
+      const regNumber = v.txt_Registration_Number || v.plateNumber || v.regNumber || "";
+
+      return {
+        id: v.int_Vehicle_Id,
+        name: vehicleName,
+        plate: regNumber,
+        category: getCategoryName(v.int_Category_Id),
+        count: vBookings.length,
+        revenue: rev,
+        status: v.txt_Vehicle_Status,
+      };
+    });
+  }, [branchVehicles, branchBookings]);
+
 
   return (
     <div className="container" style={{ padding: "32px 16px" }}>
@@ -169,6 +249,7 @@ export default function StaffDashboard() {
           gap: "8px",
           borderBottom: "1px solid var(--border)",
           marginBottom: "24px",
+          overflowX: "auto",
         }}
       >
         <button
@@ -290,10 +371,123 @@ export default function StaffDashboard() {
         >
           👤 Staff Profile
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("analytics")}
+          style={{
+            padding: "10px 18px",
+            background: "none",
+            border: "none",
+            borderBottom: activeTab === "analytics" ? "3px solid var(--accent)" : "3px solid transparent",
+            fontWeight: 700,
+            fontSize: "0.92rem",
+            color: activeTab === "analytics" ? "var(--accent)" : "var(--text-muted)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+          }}
+        >
+          📊 Branch Analytics
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("reports")}
+          style={{
+            padding: "10px 18px",
+            background: "none",
+            border: "none",
+            borderBottom: activeTab === "reports" ? "3px solid var(--accent)" : "3px solid transparent",
+            fontWeight: 700,
+            fontSize: "0.92rem",
+            color: activeTab === "reports" ? "var(--accent)" : "var(--text-muted)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+          }}
+        >
+          📗 Reports / Export
+        </button>
       </div>
+
+      {/* TAB: BRANCH OPERATIONAL ANALYTICS */}
+      {activeTab === "analytics" && (
+        <div style={{ marginBottom: "36px" }}>
+          {/* Row 1: Rental Trend & Status Breakdown */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
+              gap: "24px",
+              marginBottom: "24px",
+            }}
+          >
+            {/* Daily / Weekly Rental Trend Line Chart */}
+            <ChartCard
+              title="Rental Activity Trends"
+              subtitle={`Booking frequency and volume for ${branchName}`}
+              icon="📈"
+              badge="Operational"
+              empty={branchTrendData.length === 0}
+              emptyMessage="No rental transactions recorded for this branch yet."
+            >
+              <RevenueTrendChart
+                data={branchTrendData}
+                height={220}
+                activeMetric="bookings"
+              />
+            </ChartCard>
+
+            {/* Booking Status Donut Chart */}
+            <ChartCard
+              title="Booking Status Proportions"
+              subtitle={`Status breakdown for ${branchName} (${branchBookings.length} total)`}
+              icon="🎯"
+              badge="Live Status"
+              empty={branchBookings.length === 0}
+              emptyMessage="No bookings for this branch."
+            >
+              <StatusDonutChart
+                data={branchStatusData}
+                size={165}
+                strokeWidth={22}
+                centerSubtitle="Rides"
+              />
+            </ChartCard>
+          </div>
+
+          {/* Row 2: Branch Vehicle Availability & Utilization */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "24px" }}>
+            <ChartCard
+              title="Branch Fleet Utilization"
+              subtitle={`Rental activity and demand per vehicle at ${branchName}`}
+              icon="🏎️"
+              badge={`${branchVehicles.length} Vehicles`}
+              empty={branchFleetUtilizationData.length === 0}
+              emptyMessage="No vehicles assigned to this branch."
+            >
+              <VehicleUtilizationChart
+                vehicles={branchFleetUtilizationData}
+                maxItems={8}
+                showToggle={true}
+              />
+            </ChartCard>
+          </div>
+
+          {/* Row 3: Operational Reports & Export Section */}
+          <ReportsExportSection role="staff" branchId={branchId} />
+        </div>
+      )}
+
+      {/* TAB: BRANCH REPORTS DIRECT VIEW */}
+      {activeTab === "reports" && (
+        <ReportsExportSection role="staff" branchId={branchId} />
+      )}
 
       {/* TAB 1: BRANCH BOOKINGS */}
       {activeTab === "bookings" && (
+
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
             <input
@@ -332,12 +526,24 @@ export default function StaffDashboard() {
                   }}
                 >
                   <div style={{ flex: "1 1 280px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                       <span style={{ fontWeight: 800, fontFamily: "var(--font-display)", fontSize: "1.1rem" }}>
                         #{b.txt_Booking_Number}
                       </span>
                       <span className={`badge badge-${status}`}>
                         {t(bookingStatuses.find((s) => s.int_Booking_Status_Id === status)?.key || "status_pending")}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "0.72rem",
+                          fontWeight: 700,
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          background: b.paymentStatus === "Paid" ? "rgba(16, 185, 129, 0.15)" : b.paymentStatus === "Failed" ? "rgba(239, 68, 68, 0.15)" : "var(--accent-subtle)",
+                          color: b.paymentStatus === "Paid" ? "var(--signal-green)" : b.paymentStatus === "Failed" ? "var(--signal-red)" : "var(--accent)",
+                        }}
+                      >
+                        Payment: {b.paymentStatus || "Pending"}
                       </span>
                     </div>
 
@@ -352,6 +558,14 @@ export default function StaffDashboard() {
                     <div style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "2px" }}>
                       📅 {b.dte_Pickup_Date} → {b.dte_Return_Date} ({b.int_Total_Days} days)
                     </div>
+
+                    {b.paymentStatus === "Paid" && (
+                      <div style={{ fontSize: "0.74rem", color: "var(--text-muted)", marginTop: "4px", background: "var(--bg-base, #0d1117)", padding: "4px 8px", borderRadius: "4px", border: "1px solid var(--border)" }}>
+                        💳 Razorpay ID: <strong style={{ color: "var(--signal-green)" }}>{b.razorpayPaymentId || "-"}</strong>
+                        {b.razorpayOrderId && <span> · Order: <code>{b.razorpayOrderId}</code></span>}
+                        {b.paidAt && <span> · Paid At: {new Date(b.paidAt).toLocaleString()}</span>}
+                      </div>
+                    )}
                   </div>
 
                   {/* Financial Details */}
@@ -577,7 +791,7 @@ export default function StaffDashboard() {
           <div style={{ marginBottom: "20px" }}>
             <h2 style={{ margin: "0 0 4px 0", fontSize: "1.4rem" }}>Branch Fleet Live Tracking</h2>
             <p style={{ color: "var(--text-muted)", margin: 0, fontSize: "0.88rem" }}>
-              Active rental vehicles from your branch currently on the road with real-time GPS simulation.
+              Active rental vehicles from your branch currently on the road with real-time phone GPS tracking.
             </p>
           </div>
           <FleetLiveTracking branchFilter={user?.int_Branch_Id} initialBookingId={trackingBookingId} />

@@ -101,7 +101,7 @@ const SEED_VEHICLES = [
   },
   {
     int_Vehicle_Id: 105, txt_Registration_Number: 'TN66-IJ-5567',
-    int_Category_Id: 11, int_Brand_Id: 6, txt_Model_Name: 'Dost+',
+    int_Category_Id: 5, int_Brand_Id: 6, txt_Model_Name: 'Dost+',
     int_Manufacture_Year: 2021, int_Fuel_Type_Id: 2, int_Transmission_Id: 1,
     int_Seating_Capacity: 2, txt_Color: 'Steel Grey',
     dbl_Daily_Rent: 2100, dbl_Weekly_Rent: 13000, dbl_Security_Deposit: 4000,
@@ -113,7 +113,7 @@ const SEED_VEHICLES = [
   },
   {
     int_Vehicle_Id: 106, txt_Registration_Number: 'TN09-KL-9012',
-    int_Category_Id: 9, int_Brand_Id: 3, txt_Model_Name: 'Nexon EV',
+    int_Category_Id: 3, int_Brand_Id: 3, txt_Model_Name: 'Nexon EV',
     int_Manufacture_Year: 2023, int_Fuel_Type_Id: 3, int_Transmission_Id: 2,
     int_Seating_Capacity: 5, txt_Color: 'Sky Blue',
     dbl_Daily_Rent: 3900, dbl_Weekly_Rent: 24000, dbl_Security_Deposit: 8000,
@@ -137,7 +137,7 @@ const SEED_VEHICLES = [
   },
   {
     int_Vehicle_Id: 108, txt_Registration_Number: 'TN59-OP-1123',
-    int_Category_Id: 5, int_Brand_Id: 7, txt_Model_Name: 'Activa 6G',
+    int_Category_Id: 4, int_Brand_Id: 7, txt_Model_Name: 'Activa 6G',
     int_Manufacture_Year: 2024, int_Fuel_Type_Id: 1, int_Transmission_Id: 2,
     int_Seating_Capacity: 2, txt_Color: 'Matte Green',
     dbl_Daily_Rent: 500, dbl_Weekly_Rent: 3000, dbl_Security_Deposit: 1000,
@@ -161,7 +161,7 @@ const SEED_VEHICLES = [
   },
   {
     int_Vehicle_Id: 110, txt_Registration_Number: 'TN66-ST-4470',
-    int_Category_Id: 6, int_Brand_Id: 8, txt_Model_Name: 'Hilux Revo',
+    int_Category_Id: 3, int_Brand_Id: 8, txt_Model_Name: 'Hilux Revo',
     int_Manufacture_Year: 2023, int_Fuel_Type_Id: 2, int_Transmission_Id: 2,
     int_Seating_Capacity: 5, txt_Color: 'Ocean Blue',
     dbl_Daily_Rent: 3800, dbl_Weekly_Rent: 24000, dbl_Security_Deposit: 8000,
@@ -173,7 +173,7 @@ const SEED_VEHICLES = [
   },
   {
     int_Vehicle_Id: 111, txt_Registration_Number: 'TN59-UV-9988',
-    int_Category_Id: 7, int_Brand_Id: 8, txt_Model_Name: 'Innova Crysta',
+    int_Category_Id: 3, int_Brand_Id: 8, txt_Model_Name: 'Innova Crysta',
     int_Manufacture_Year: 2022, int_Fuel_Type_Id: 2, int_Transmission_Id: 1,
     int_Seating_Capacity: 8, txt_Color: 'Pearl White',
     dbl_Daily_Rent: 3200, dbl_Weekly_Rent: 20000, dbl_Security_Deposit: 6000,
@@ -185,7 +185,7 @@ const SEED_VEHICLES = [
   },
   {
     int_Vehicle_Id: 112, txt_Registration_Number: 'TN22-WX-1122',
-    int_Category_Id: 8, int_Brand_Id: 11, txt_Model_Name: 'C-Class',
+    int_Category_Id: 2, int_Brand_Id: 11, txt_Model_Name: 'C-Class',
     int_Manufacture_Year: 2023, int_Fuel_Type_Id: 1, int_Transmission_Id: 2,
     int_Seating_Capacity: 5, txt_Color: 'Obsidian Black',
     dbl_Daily_Rent: 6900, dbl_Weekly_Rent: 42000, dbl_Security_Deposit: 20000,
@@ -197,7 +197,7 @@ const SEED_VEHICLES = [
   },
   {
     int_Vehicle_Id: 113, txt_Registration_Number: 'TN37-YZ-3344',
-    int_Category_Id: 10, int_Brand_Id: 12, txt_Model_Name: 'RV400',
+    int_Category_Id: 4, int_Brand_Id: 12, txt_Model_Name: 'RV400',
     int_Manufacture_Year: 2023, int_Fuel_Type_Id: 3, int_Transmission_Id: 2,
     int_Seating_Capacity: 2, txt_Color: 'Revolt Red',
     dbl_Daily_Rent: 800, dbl_Weekly_Rent: 4800, dbl_Security_Deposit: 2500,
@@ -209,7 +209,7 @@ const SEED_VEHICLES = [
   },
   {
     int_Vehicle_Id: 114, txt_Registration_Number: 'TN01-AB-8877',
-    int_Category_Id: 5, int_Brand_Id: 10, txt_Model_Name: 'Jupiter',
+    int_Category_Id: 4, int_Brand_Id: 10, txt_Model_Name: 'Jupiter',
     int_Manufacture_Year: 2023, int_Fuel_Type_Id: 1, int_Transmission_Id: 2,
     int_Seating_Capacity: 2, txt_Color: 'Mystic Grey',
     dbl_Daily_Rent: 600, dbl_Weekly_Rent: 3500, dbl_Security_Deposit: 1000,

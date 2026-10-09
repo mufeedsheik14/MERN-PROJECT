@@ -3232,6 +3232,34 @@ button { cursor: pointer; }
   border-left: 3px solid var(--accent);
 }
 
+/* ---------- Payment Checkout Print & Spinner Styles ---------- */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #printable-receipt, #printable-receipt * {
+    visibility: visible;
+  }
+  #printable-receipt {
+    position: absolute;
+    left: 20px;
+    top: 20px;
+    width: calc(100% - 40px);
+    margin: 0;
+    padding: 24px;
+    background: #FFFFFF !important;
+    color: #111827 !important;
+    border: 1px solid #111827 !important;
+    border-radius: 8px;
+  }
+}
+
+
 
 
 

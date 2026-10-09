@@ -134,6 +134,25 @@ export function AuthProvider({ children }) {
   }, []);
 
   /**
+   * Handle OAuth JWT token: stores token, fetches user profile, and sets user session.
+   */
+  const handleOAuthSuccess = useCallback(async (jwtToken) => {
+    setStoredToken(jwtToken);
+    setToken(jwtToken);
+    try {
+      const data = await getMeApi(jwtToken);
+      if (data?.user) {
+        setUser(data.user);
+        return { success: true, user: data.user };
+      }
+      return { success: false, message: "Could not retrieve user profile" };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  }, []);
+
+
+  /**
    * Update profile using PUT /api/auth/me (Staff or Customer own profile)
    */
   const updateProfile = useCallback(
@@ -349,6 +368,7 @@ export function AuthProvider({ children }) {
       users,
       login,
       loginWithGoogle,
+      handleOAuthSuccess,
       signup,
       logout,
       updateProfile,
@@ -368,6 +388,7 @@ export function AuthProvider({ children }) {
       users,
       login,
       loginWithGoogle,
+      handleOAuthSuccess,
       signup,
       logout,
       updateProfile,

@@ -1,5 +1,11 @@
 import { useLanguage } from "../context/LanguageContext";
-import { categories, fuelTypes, transmissionTypes, branches } from "../data/mockData";
+import {
+  categories,
+  fuelTypes,
+  transmissionTypes,
+  branches,
+  getCategoryIdFromFilter,
+} from "../data/mockData";
 
 export default function Filters({
   filters,
@@ -16,6 +22,8 @@ export default function Filters({
   const setQuickTag = (tag) => {
     onChange({ ...filters, quickTag: filters.quickTag === tag ? "" : tag });
   };
+
+  const selectedCategoryValue = getCategoryIdFromFilter(filters.category) || filters.category;
 
   return (
     <div className="filters-container-box">
@@ -42,7 +50,11 @@ export default function Filters({
         </div>
 
         <div className="filters-select-group">
-          <select value={filters.category} onChange={update("category")} className="filter-select">
+          <select
+            value={selectedCategoryValue}
+            onChange={update("category")}
+            className="filter-select"
+          >
             <option value="">{t("filter_category") || "Category"}: All</option>
             {categories.map((c) => (
               <option key={c.int_Category_Id} value={c.int_Category_Id}>

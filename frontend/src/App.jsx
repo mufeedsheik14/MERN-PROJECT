@@ -18,6 +18,8 @@ import Profile from "./pages/Profile";
 import Login from "./pages/Login";
 import StaffLogin from "./pages/StaffLogin";
 import Dashboard from "./pages/Dashboard";
+import OAuthCallback from "./pages/OAuthCallback";
+
 
 export default function App() {
   return (
@@ -52,7 +54,9 @@ export default function App() {
                       }
                     />
                     <Route path="/login" element={<Login />} />
+                    <Route path="/auth/callback" element={<OAuthCallback />} />
                     <Route path="/staff-login" element={<StaffLogin />} />
+
                     <Route
                       path="/dashboard"
                       element={

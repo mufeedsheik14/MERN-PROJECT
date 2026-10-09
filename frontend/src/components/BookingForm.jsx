@@ -7,6 +7,9 @@ import { useBookings } from "../context/BookingContext";
 import { useInteraction } from "../context/InteractionContext";
 import { branches } from "../data/mockData";
 import ConfettiBurst from "./ConfettiBurst";
+import RazorpayPaymentModal from "./RazorpayPaymentModal";
+import BookingReceiptModal from "./BookingReceiptModal";
+import { downloadReceiptPdf } from "../utils/receiptPdfGenerator";
 
 const TAX_RATE = 0.18;
 
@@ -73,6 +76,10 @@ export default function BookingForm({ vehicle }) {
   const [appliedDiscountPercent, setAppliedDiscountPercent] = useState(0);
   const [appliedMaxDiscount, setAppliedMaxDiscount] = useState(0);
   const [successRef, setSuccessRef] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [activeBooking, setActiveBooking] = useState(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
 
   const nameInputRef = useRef(null);
 
@@ -186,38 +193,46 @@ export default function BookingForm({ vehicle }) {
   };
 
   const handleSubmit = useCallback(
-    (e) => {
+    async (e) => {
       e.preventDefault();
       if (!validateStep1() || !validateStep3()) return;
 
-      const bookingNumber = `BK${Date.now().toString().slice(-8)}`;
-      addBooking({
-        txt_Booking_Number: bookingNumber,
-        int_Vehicle_Id: vehicle.int_Vehicle_Id,
-        vehicleLabel: vehicle.txt_Model_Name,
-        customerName: form.customerName,
-        customerUsername: user?.username || "guest",
-        phone: form.phone,
-        email: form.email,
-        int_Pickup_Branch_Id: Number(form.pickupBranch),
-        int_Drop_Branch_Id: Number(form.dropBranch),
-        dte_Pickup_Date: form.pickupDate,
-        dte_Return_Date: form.returnDate,
-        int_Total_Days: totalDays,
-        dbl_Rate_Per_Day: vehicle.dbl_Daily_Rent,
-        dbl_Total_Amount: pricing.subtotal,
-        dbl_Discount_Amount: pricing.discount,
-        dbl_Tax_Amount: pricing.tax,
-        dbl_Security_Deposit: vehicle.dbl_Security_Deposit,
-        dbl_Net_Amount: pricing.net,
-        int_Booking_Status_Id: 1, // Pending
-        dte_Booking_Date: new Date().toISOString(),
-      });
-      setSuccessRef(bookingNumber);
-      setConfettiKey(`booking-${Date.now()}`);
-      showToast(`Reservation ${bookingNumber} created successfully! 🎉`, "success", "🚀");
+      // If booking already created and pending, re-open checkout (prevents duplicate bookings)
+      if (activeBooking && activeBooking.paymentStatus !== "Paid") {
+        setShowPaymentModal(true);
+        return;
+      }
+
+      setSubmitting(true);
+      try {
+        const created = await addBooking({
+          int_Vehicle_Id: vehicle.int_Vehicle_Id,
+          vehicleId: vehicle._id || vehicle.int_Vehicle_Id,
+          vehicleLabel: vehicle.txt_Model_Name,
+          customerName: form.customerName,
+          customerUsername: user?.username || "guest",
+          phone: form.phone,
+          email: form.email,
+          int_Pickup_Branch_Id: Number(form.pickupBranch),
+          int_Drop_Branch_Id: Number(form.dropBranch),
+          dte_Pickup_Date: form.pickupDate,
+          dte_Return_Date: form.returnDate,
+          pickupDate: form.pickupDate,
+          returnDate: form.returnDate,
+          addons,
+          couponCode: form.couponCode,
+        });
+
+        setActiveBooking(created);
+        setShowPaymentModal(true);
+        showToast(`Reservation #${created.txt_Booking_Number} created! Opening Razorpay test checkout...`, "info", "💳");
+      } catch (err) {
+        showToast(err.message || "Failed to confirm reservation", "error", "⚠️");
+      } finally {
+        setSubmitting(false);
+      }
     },
-    [validateStep1, validateStep3, addBooking, vehicle, form, totalDays, pricing, user, showToast]
+    [validateStep1, validateStep3, addBooking, vehicle, form, addons, user, showToast, activeBooking]
   );
 
   // If vehicle is in maintenance
@@ -263,21 +278,63 @@ export default function BookingForm({ vehicle }) {
   }
 
   if (successRef) {
+    const isPaid = activeBooking?.paymentStatus === "Paid";
     return (
       <div className="booking-card" style={{ textAlign: "center", padding: "36px 20px" }}>
         <ConfettiBurst triggerKey={confettiKey} />
-        <div style={{ fontSize: "2.8rem", marginBottom: "10px" }}>🎉</div>
-        <h3 style={{ margin: 0, fontSize: "1.3rem" }}>{t("booking_success")}</h3>
-        <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", margin: "8px 0 16px" }}>
+        <div style={{ fontSize: "2.8rem", marginBottom: "8px" }}>🎉</div>
+        <div
+          style={{
+            display: "inline-block",
+            padding: "4px 12px",
+            background: "rgba(16, 185, 129, 0.15)",
+            color: "var(--signal-green)",
+            borderRadius: "20px",
+            fontSize: "0.78rem",
+            fontWeight: 700,
+            marginBottom: "8px",
+          }}
+        >
+          ✓ {isPaid ? "Payment Verified · Booking Confirmed" : "Booking Confirmed"}
+        </div>
+        <h3 style={{ margin: "4px 0", fontSize: "1.3rem" }}>{t("booking_success")}</h3>
+        <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", margin: "8px 0 14px" }}>
           {t("booking_reference")}: <strong style={{ color: "var(--accent)" }}>{successRef}</strong>
         </p>
+
+        {activeBooking?.razorpayPaymentId && (
+          <div style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: "12px" }}>
+            Razorpay Payment ID: <code style={{ color: "var(--signal-green)" }}>{activeBooking.razorpayPaymentId}</code>
+          </div>
+        )}
+
         <div className="booking-summary-pill">
-          <span>{totalDays} Days</span> · <span>📍 {branches.find((b) => b.int_Branch_Id === Number(form.pickupBranch))?.txt_Branch_Name}</span>
+          <span>{totalDays} Days</span> · <span>📍 {branches.find((b) => b.int_Branch_Id === Number(form.pickupBranch))?.txt_Branch_Name}</span> · <span>₹{Math.round(pricing.net).toLocaleString("en-IN")}</span>
         </div>
         <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", lineHeight: "1.5", margin: "16px 0 24px" }}>
-          Your reservation has been confirmed with the branch team. We have sent the trip details to {form.email}.
+          Your reservation has been confirmed and secured in MongoDB. We have sent the trip receipt to {form.email}.
         </p>
         <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {/* Action buttons: View Receipt & Download PDF */}
+          <div style={{ display: "flex", gap: "10px", width: "100%" }}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ flex: 1, padding: "10px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+              onClick={() => setShowReceiptModal(true)}
+            >
+              🧾 View Receipt
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ flex: 1, padding: "10px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+              onClick={() => downloadReceiptPdf(activeBooking, { vehicles: [vehicle] })}
+            >
+              📥 Download PDF
+            </button>
+          </div>
+
           <button
             type="button"
             className="btn btn-primary"
@@ -290,6 +347,7 @@ export default function BookingForm({ vehicle }) {
             className="btn btn-ghost"
             onClick={() => {
               setSuccessRef(null);
+              setActiveBooking(null);
               setActiveStep(1);
             }}
           >
@@ -739,14 +797,41 @@ export default function BookingForm({ vehicle }) {
               <button
                 type="submit"
                 className="btn btn-primary"
-                style={{ flex: 1.8, padding: "12px" }}
+                style={{ flex: 1.8, padding: "12px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
+                disabled={submitting}
               >
-                ⚡ {t("confirm_booking")}
+                {submitting ? (
+                  "⏳ Preparing Checkout..."
+                ) : activeBooking && activeBooking.paymentStatus !== "Paid" ? (
+                  `💳 Pay Now with Razorpay (₹${Math.round(pricing.net).toLocaleString("en-IN")})`
+                ) : (
+                  `⚡ Proceed to Payment (₹${Math.round(pricing.net).toLocaleString("en-IN")})`
+                )}
               </button>
             </div>
           </div>
         )}
       </form>
+
+      {/* Razorpay TEST Mode Payment Modal */}
+      <RazorpayPaymentModal
+        isOpen={showPaymentModal}
+        booking={activeBooking}
+        onClose={() => setShowPaymentModal(false)}
+        onPaymentSuccess={(confirmedBooking) => {
+          setActiveBooking(confirmedBooking);
+          setSuccessRef(confirmedBooking.txt_Booking_Number);
+          setConfettiKey(`booking-${Date.now()}`);
+          setShowPaymentModal(false);
+        }}
+      />
+
+      {/* Booking Receipt Modal */}
+      <BookingReceiptModal
+        isOpen={showReceiptModal}
+        booking={activeBooking}
+        onClose={() => setShowReceiptModal(false)}
+      />
     </div>
   );
 }

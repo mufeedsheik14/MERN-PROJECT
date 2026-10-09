@@ -324,6 +324,8 @@ const getDestinationWeather = async (req, res) => {
     }
   }
 
+
+
   // 3. Fallback to Open-Meteo meteorological API with accurate current observation data
   try {
     const meteoResult = await fetchFromOpenMeteo(location, city);

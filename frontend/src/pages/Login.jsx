@@ -2,30 +2,26 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useLanguage } from "../context/LanguageContext";
 import { useAuth } from "../context/AuthContext";
+import { API_BASE_URL } from "../services/apiConfig";
 
-const GOOGLE_CLIENT_ID =
-  import.meta.env.VITE_GOOGLE_CLIENT_ID ||
-  "712345678901-exampleclientid.apps.googleusercontent.com";
-
-function parseJwt(token) {
-  try {
-    const base64Url = token.split(".")[1];
-    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
-    return JSON.parse(jsonPayload);
-  } catch {
-    return null;
-  }
-}
+const OAUTH_ERROR_MESSAGES = {
+  cancelled: "Google sign-in was cancelled.",
+  google_not_configured:
+    "Google OAuth is not configured on the server yet. Please add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to backend/.env.",
+  missing_code_or_state: "Invalid Google authorization response. Missing code or state.",
+  invalid_state: "Security verification (PKCE/state) failed or session expired. Please try again.",
+  google_auth_failed: "Google authentication failed. Please try again.",
+  unverified_email: "Your Google account email is not verified. Please verify your email with Google.",
+  account_deactivated: "Your RoadReady account is deactivated. Please contact support.",
+  token_exchange_failed: "Failed to communicate with Google authentication servers. Please try again.",
+  token_validation_failed: "Failed to validate Google identity token. Please try again.",
+  profile_fetch_failed: "Could not retrieve your verified Google profile. Please try again.",
+  oauth_server_error: "A server error occurred during Google sign-in. Please try again.",
+};
 
 export default function Login() {
   const { t } = useLanguage();
-  const { login, loginWithGoogle, signup, user } = useAuth();
+  const { login, signup, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -49,11 +45,8 @@ export default function Login() {
   const [signupError, setSignupError] = useState("");
   const [isSignupSubmitting, setIsSignupSubmitting] = useState(false);
 
-  // Google OAuth Modal state
-  const [showGoogleModal, setShowGoogleModal] = useState(false);
-  const [customGoogleEmail, setCustomGoogleEmail] = useState("");
-  const [customGoogleName, setCustomGoogleName] = useState("");
-  const [isCustomMode, setIsCustomMode] = useState(false);
+  // Google OAuth state
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [googleAuthError, setGoogleAuthError] = useState("");
 
   const userRef = useRef(null);
@@ -73,6 +66,7 @@ export default function Login() {
     }
   }, [user, navigate, location.state]);
 
+  // Focus input when tab changes
   useEffect(() => {
     if (activeTab === "signin") {
       userRef.current?.focus();
@@ -81,90 +75,36 @@ export default function Login() {
     }
   }, [activeTab]);
 
-  // Initialize Google Identity Services (GSI) if available
+  // Check URL parameters for OAuth errors returning from backend redirect
   useEffect(() => {
-    if (window.google?.accounts?.id) {
-      try {
-        window.google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
-          callback: (response) => {
-            if (response.credential) {
-              const decoded = parseJwt(response.credential);
-              if (decoded && decoded.email) {
-                loginWithGoogle({
-                  name: decoded.name || decoded.given_name || decoded.email.split("@")[0],
-                  email: decoded.email,
-                  googleId: decoded.sub,
-                  picture: decoded.picture,
-                });
-              }
-            }
-          },
-          auto_select: false,
-        });
-      } catch (err) {
-        console.warn("Google GSI init note:", err);
-      }
+    const params = new URLSearchParams(location.search);
+    const oauthErr = params.get("error");
+    if (oauthErr) {
+      const message =
+        OAUTH_ERROR_MESSAGES[oauthErr] ||
+        `Google authentication error: ${oauthErr}`;
+      setGoogleAuthError(message);
     }
-  }, [loginWithGoogle]);
+  }, [location.search]);
 
+  /**
+   * Start Google OAuth 2.0 Authorization Code flow with PKCE
+   * Directs browser to backend /api/auth/google
+   */
   const handleGoogleSignInClick = () => {
-    // If real GSI client ID is configured and prompt can be displayed, try it
-    if (
-      window.google?.accounts?.id &&
-      import.meta.env.VITE_GOOGLE_CLIENT_ID
-    ) {
-      try {
-        window.google.accounts.id.prompt((notification) => {
-          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            setShowGoogleModal(true);
-          }
-        });
-        return;
-      } catch {
-        // Fallback to interactive Google OAuth dialog
-      }
-    }
-    setShowGoogleModal(true);
-  };
-
-  const handleGoogleAccountSelect = (account) => {
     setGoogleAuthError("");
-    const result = loginWithGoogle({
-      name: account.name,
-      email: account.email,
-      googleId: account.googleId,
-      picture: account.picture,
-    });
-    if (result.success) {
-      setShowGoogleModal(false);
-    } else {
-      setGoogleAuthError(t(result.errorKey || "login_error"));
-    }
-  };
+    setError("");
+    setSignupError("");
+    setIsGoogleLoading(true);
 
-  const handleCustomGoogleSubmit = (e) => {
-    e.preventDefault();
-    setGoogleAuthError("");
-    if (!customGoogleEmail.trim()) {
-      setGoogleAuthError("Please enter your Google email address.");
-      return;
-    }
-    if (!/^\S+@\S+\.\S+$/.test(customGoogleEmail.trim())) {
-      setGoogleAuthError("Please enter a valid email address.");
-      return;
-    }
-
-    const result = loginWithGoogle({
-      name: customGoogleName.trim() || customGoogleEmail.split("@")[0],
-      email: customGoogleEmail.trim(),
-      googleId: "google_" + Date.now(),
-    });
-
-    if (result.success) {
-      setShowGoogleModal(false);
-    } else {
-      setGoogleAuthError(t(result.errorKey || "login_error"));
+    try {
+      // Build initiation URL passing current origin for seamless LAN / mobile phone support
+      const origin = window.location.origin;
+      const targetUrl = `${API_BASE_URL}/auth/google?origin=${encodeURIComponent(origin)}`;
+      window.location.href = targetUrl;
+    } catch {
+      setIsGoogleLoading(false);
+      setGoogleAuthError("Failed to initiate Google sign-in. Please try again.");
     }
   };
 
@@ -172,11 +112,13 @@ export default function Login() {
     setActiveTab(tab);
     setError("");
     setSignupError("");
+    setGoogleAuthError("");
   };
 
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setGoogleAuthError("");
     if (!username.trim() || !password) {
       setError(t("field_required"));
       return;
@@ -194,6 +136,7 @@ export default function Login() {
   const handleSignupSubmit = async (e) => {
     e.preventDefault();
     setSignupError("");
+    setGoogleAuthError("");
 
     if (
       !signupForm.name.trim() ||
@@ -246,6 +189,7 @@ export default function Login() {
       setUsername(u);
       setPassword(p);
       setError("");
+      setGoogleAuthError("");
       setIsSubmitting(true);
       const result = await login(u, p);
       setIsSubmitting(false);
@@ -303,11 +247,32 @@ export default function Login() {
           </button>
         </div>
 
-        {/* Continue with Google Option */}
+        {/* Inline Google OAuth Error Notification (No alert() popups) */}
+        {googleAuthError && (
+          <div
+            className="alert alert-error"
+            style={{
+              marginBottom: "18px",
+              padding: "12px 14px",
+              fontSize: "0.88rem",
+              borderRadius: "var(--radius-sm)",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "8px",
+            }}
+          >
+            <span style={{ fontSize: "1.1rem", lineHeight: 1 }}>⚠️</span>
+            <div style={{ flex: 1 }}>{googleAuthError}</div>
+          </div>
+        )}
+
+        {/* Continue with Google Button */}
         <div style={{ marginBottom: "20px" }}>
           <button
             type="button"
+            id="google-oauth-btn"
             onClick={handleGoogleSignInClick}
+            disabled={isGoogleLoading}
             style={{
               width: "100%",
               display: "flex",
@@ -315,44 +280,69 @@ export default function Login() {
               justifyContent: "center",
               gap: "12px",
               padding: "11px 16px",
-              background: "var(--bg-elevated)",
+              background: isGoogleLoading ? "var(--bg-inset)" : "var(--bg-elevated)",
               border: "1px solid var(--border)",
               borderRadius: "var(--radius-sm)",
               color: "var(--text)",
               fontWeight: 600,
-              fontSize: "0.92rem",
-              cursor: "pointer",
+              fontSize: "0.94rem",
+              cursor: isGoogleLoading ? "not-allowed" : "pointer",
               transition: "all 0.15s ease",
               boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+              opacity: isGoogleLoading ? 0.75 : 1,
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = "#4285F4";
-              e.currentTarget.style.boxShadow = "0 2px 10px rgba(66,133,244,0.18)";
+              if (!isGoogleLoading) {
+                e.currentTarget.style.borderColor = "#4285F4";
+                e.currentTarget.style.boxShadow = "0 2px 10px rgba(66,133,244,0.18)";
+              }
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.borderColor = "var(--border)";
               e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.06)";
             }}
           >
-            <svg width="18" height="18" viewBox="0 0 18 18">
-              <path
-                fill="#4285F4"
-                d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"
-              />
-              <path
-                fill="#34A853"
-                d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.836.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"
-              />
-              <path
-                fill="#EA4335"
-                d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"
-              />
-            </svg>
-            <span>{activeTab === "signin" ? "Continue with Google" : "Sign up with Google"}</span>
+            {isGoogleLoading ? (
+              <>
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: "16px",
+                    height: "16px",
+                    border: "2px solid #4285F4",
+                    borderTopColor: "transparent",
+                    borderRadius: "50%",
+                    animation: "spin 0.8s linear infinite",
+                  }}
+                />
+                <style>
+                  {`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}
+                </style>
+                <span>Connecting to Google...</span>
+              </>
+            ) : (
+              <>
+                <svg width="18" height="18" viewBox="0 0 18 18">
+                  <path
+                    fill="#4285F4"
+                    d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.836.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"
+                  />
+                </svg>
+                <span>{activeTab === "signin" ? "Continue with Google" : "Sign up with Google"}</span>
+              </>
+            )}
           </button>
 
           <div style={{ display: "flex", alignItems: "center", margin: "16px 0", gap: "12px" }}>
@@ -537,228 +527,6 @@ export default function Login() {
           </div>
         )}
       </div>
-
-      {/* Google OAuth Interactive Dialog */}
-      {showGoogleModal && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0,0,0,0.65)",
-            backdropFilter: "blur(4px)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-            padding: "16px",
-          }}
-          onClick={() => setShowGoogleModal(false)}
-        >
-          <div
-            style={{
-              background: "var(--bg-elevated)",
-              border: "1px solid var(--border)",
-              borderRadius: "16px",
-              padding: "32px",
-              maxWidth: "420px",
-              width: "100%",
-              boxShadow: "var(--shadow-lg)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Google Header */}
-            <div style={{ textAlign: "center", marginBottom: "20px" }}>
-              <svg width="32" height="32" viewBox="0 0 18 18" style={{ marginBottom: "10px" }}>
-                <path
-                  fill="#4285F4"
-                  d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.836.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"
-                />
-              </svg>
-              <h3 style={{ margin: 0, fontSize: "1.25rem", color: "var(--text)" }}>Sign in with Google</h3>
-              <p style={{ margin: "4px 0 0 0", fontSize: "0.85rem", color: "var(--text-muted)" }}>
-                Choose an account to continue to <strong>RoadReady</strong>
-              </p>
-            </div>
-
-            {googleAuthError && <div className="alert alert-error" style={{ marginBottom: "16px" }}>{googleAuthError}</div>}
-
-            {!isCustomMode ? (
-              <div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "18px" }}>
-                  {[
-                    {
-                      name: "Rahul Sharma",
-                      email: "rahul.sharma@gmail.com",
-                      googleId: "google_rahul_101",
-                      initial: "R",
-                      color: "#E06B54",
-                    },
-                    {
-                      name: "Priya Nair",
-                      email: "priya.nair@gmail.com",
-                      googleId: "google_priya_102",
-                      initial: "P",
-                      color: "#8B5CF6",
-                    },
-                    {
-                      name: "Alex Morgan",
-                      email: "alex.morgan@gmail.com",
-                      googleId: "google_alex_103",
-                      initial: "A",
-                      color: "#4FBE83",
-                    },
-                  ].map((acc) => (
-                    <div
-                      key={acc.email}
-                      onClick={() => handleGoogleAccountSelect(acc)}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "12px",
-                        padding: "10px 14px",
-                        borderRadius: "var(--radius-sm)",
-                        border: "1px solid var(--border)",
-                        background: "var(--bg-inset)",
-                        cursor: "pointer",
-                        transition: "all 0.15s ease",
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = "#4285F4";
-                        e.currentTarget.style.background = "rgba(66,133,244,0.08)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.borderColor = "var(--border)";
-                        e.currentTarget.style.background = "var(--bg-inset)";
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 34,
-                          height: 34,
-                          borderRadius: "50%",
-                          background: acc.color,
-                          color: "#fff",
-                          fontWeight: 700,
-                          fontSize: "0.95rem",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0,
-                        }}
-                      >
-                        {acc.initial}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, fontSize: "0.88rem", color: "var(--text)" }}>{acc.name}</div>
-                        <div style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>{acc.email}</div>
-                      </div>
-                    </div>
-                  ))}
-
-                  <button
-                    type="button"
-                    onClick={() => setIsCustomMode(true)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "12px",
-                      padding: "10px 14px",
-                      borderRadius: "var(--radius-sm)",
-                      border: "1px dashed var(--border)",
-                      background: "none",
-                      color: "var(--text-muted)",
-                      cursor: "pointer",
-                      fontSize: "0.85rem",
-                      fontWeight: 600,
-                      textAlign: "left",
-                    }}
-                  >
-                    <span style={{ fontSize: "1.1rem" }}>➕</span>
-                    <span>Use another Google account</span>
-                  </button>
-                </div>
-
-                <div
-                  style={{
-                    fontSize: "0.72rem",
-                    color: "var(--text-faint)",
-                    textAlign: "center",
-                    borderTop: "1px solid var(--border)",
-                    paddingTop: "14px",
-                    lineHeight: 1.4,
-                  }}
-                >
-                  🔒 To continue, Google will share your name and email address with RoadReady. No passwords are ever stored or transferred.
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={handleCustomGoogleSubmit}>
-                <div className="form-row">
-                  <label>Google Full Name</label>
-                  <input
-                    value={customGoogleName}
-                    onChange={(e) => setCustomGoogleName(e.target.value)}
-                    placeholder="e.g. Sarah Jenkins"
-                  />
-                </div>
-
-                <div className="form-row">
-                  <label>Gmail / Google Email Address *</label>
-                  <input
-                    type="email"
-                    required
-                    value={customGoogleEmail}
-                    onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                    placeholder="e.g. sarah.j@gmail.com"
-                  />
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "18px" }}>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => {
-                      setIsCustomMode(false);
-                      setGoogleAuthError("");
-                    }}
-                  >
-                    Back
-                  </button>
-                  <button type="submit" className="btn btn-primary" style={{ background: "#4285F4", borderColor: "#4285F4" }}>
-                    Sign in with Google
-                  </button>
-                </div>
-              </form>
-            )}
-
-            <div style={{ marginTop: "16px", textAlign: "right" }}>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setShowGoogleModal(false)}
-                style={{ fontSize: "0.8rem", padding: "4px 10px" }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
