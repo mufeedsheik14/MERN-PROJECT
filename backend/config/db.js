@@ -1,6 +1,10 @@
 const dns = require('node:dns');
 
-dns.setServers(['1.1.1.1', '8.8.8.8']);
+try {
+  dns.setServers(['1.1.1.1', '8.8.8.8']);
+} catch (dnsErr) {
+  console.warn('⚠️ Custom DNS servers could not be set, falling back to system resolver:', dnsErr.message);
+}
 const mongoose = require('mongoose');
 
 /**

@@ -35,23 +35,29 @@ connectDB();
 // ── Express app setup ─────────────────────────────────────────
 const app = express();
 
+// Trust reverse proxies (Render, Vercel, Railway, AWS, Heroku)
+app.set('trust proxy', 1);
+
 // Security: set common HTTP headers
 app.use(helmet());
 
-// CORS: allow requests from React frontend (Vite dev server on localhost or LAN mobile IP)
-const isLocalNetworkOrigin = (origin) => {
-  if (!origin) return true; // allow non-browser or mobile tools
-  if (process.env.CLIENT_ORIGIN && origin === process.env.CLIENT_ORIGIN) return true;
-  return /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/.test(origin);
+// CORS: allow requests from React frontend (Vite dev server, mobile LAN IP, or deployed URL)
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true; // allow non-browser, server-to-server, or mobile tools
+  if (process.env.CLIENT_ORIGIN) {
+    const allowedList = process.env.CLIENT_ORIGIN.split(',').map((o) => o.trim());
+    if (allowedList.includes('*') || allowedList.includes(origin)) return true;
+  }
+  return /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/.test(origin);
 };
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (isLocalNetworkOrigin(origin)) {
+      if (isAllowedOrigin(origin)) {
         callback(null, true);
       } else {
-        callback(null, origin); // Fallback allow in dev
+        callback(null, origin); // Fallback allow origin with credentials support
       }
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -73,7 +79,18 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
 
 
-// ── Health check endpoint ─────────────────────────────────────
+// ── Root & Health check endpoints ─────────────────────────────
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    name: 'RoadReady Vehicle Rental API',
+    status: 'online',
+    health: '/api/health',
+    environment: process.env.NODE_ENV || 'development',
+    timestamp: new Date().toISOString(),
+  });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
